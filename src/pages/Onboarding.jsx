@@ -226,7 +226,7 @@ export default function Onboarding() {
               </div>
             </div>
             <h1 className="font-heading text-3xl font-bold text-slate-900 mb-2 animate-fade-in">
-              Personal DigiLocker
+              DigiLocker by OM
             </h1>
             <p className="text-slate-500 text-lg">
               Your Family's Private Document Vault
