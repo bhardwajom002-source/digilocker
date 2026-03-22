@@ -12,8 +12,7 @@ export function AuthProvider({ children }) {
   const [userName, setUserName] = useState('');
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState(null);
-  const [autoLockMinutes, setAutoLockMinutes] = useState(10);
-  const [lastActivity, setLastActivity] = useState(Date.now());
+  const [autoLockMinutes, setAutoLockMinutes] = useState(0);
   
   let autoLockTimer = null;
 
@@ -43,7 +42,6 @@ export function AuthProvider({ children }) {
     if (!isUnlocked || autoLockMinutes === 0) return;
 
     const resetActivityTimer = () => {
-      setLastActivity(Date.now());
       if (autoLockTimer) clearTimeout(autoLockTimer);
       
       autoLockTimer = setTimeout(() => {
@@ -97,7 +95,7 @@ export function AuthProvider({ children }) {
         passwordHash,
         pinHash,
         biometricEnabled: false,
-        autoLockMinutes: 10,
+        autoLockMinutes: 0,
         theme: 'light',
         language: 'en',
         createdAt: new Date(),
