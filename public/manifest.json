@@ -1,20 +1,20 @@
 {
   "name": "DigiLocker",
   "short_name": "DigiLocker",
-  "start_url": "/digilocker/",
-  "scope": "/digilocker/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1a73e8",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/digilocker/icon-192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/digilocker/icon-512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
