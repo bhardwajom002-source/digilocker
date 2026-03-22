@@ -10,7 +10,7 @@ export default function TopBar() {
 
   const handleLock = async () => {
     await lock();
-    navigate('/lock');
+    navigate('/login');
   };
 
   return (

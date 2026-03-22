@@ -1,6 +1,14 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AppShell from './components/layout/AppShell';
+
+// New Mobile App Screens
+import SplashScreen from './pages/SplashScreen';
+import AuthScreen from './pages/AuthScreen';
+import RegisterScreen from './pages/RegisterScreen';
+import LoginScreen from './pages/LoginScreen';
+
+// Existing Screens
 import Onboarding from './pages/Onboarding';
 import SetupPassword from './pages/SetupPassword';
 import LockScreen from './pages/LockScreen';
@@ -23,18 +31,18 @@ function ProtectedRoute({ children }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
       </div>
     );
   }
 
   if (!isSetupComplete) {
-    return <Navigate to="/onboarding" replace />;
+    return <Navigate to="/register" replace />;
   }
 
   if (!isUnlocked) {
-    return <Navigate to="/lock" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return children;
@@ -45,7 +53,7 @@ function PublicRoute({ children }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
       </div>
     );
@@ -59,16 +67,36 @@ function PublicRoute({ children }) {
     return <Navigate to="/" replace />;
   }
 
-  return <Navigate to="/lock" replace />;
+  return <Navigate to="/login" replace />;
 }
 
 export default function App() {
+  const { isLoading } = useAuth();
+
+  // Show loading spinner while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+      </div>
+    );
+  }
+
   return (
     <Routes>
-      {/* Public routes - only accessible when locked or not setup */}
-      <Route path="/onboarding" element={<PublicRoute><Onboarding /></PublicRoute>} />
-      <Route path="/setup" element={<PublicRoute><SetupPassword /></PublicRoute>} />
-      <Route path="/lock" element={<PublicRoute><LockScreen /></PublicRoute>} />
+      {/* Mobile App Flow */}
+      <Route path="/splash" element={<SplashScreen />} />
+      <Route path="/" element={<Navigate to="/splash" replace />} />
+      
+      {/* Auth Flow */}
+      <Route path="/auth" element={<PublicRoute><AuthScreen /></PublicRoute>} />
+      <Route path="/register" element={<PublicRoute><RegisterScreen /></PublicRoute>} />
+      <Route path="/login" element={<PublicRoute><LoginScreen /></PublicRoute>} />
+      
+      {/* Legacy routes - redirect to new flow */}
+      <Route path="/onboarding" element={<Navigate to="/auth" replace />} />
+      <Route path="/setup" element={<Navigate to="/register" replace />} />
+      <Route path="/lock" element={<Navigate to="/login" replace />} />
       
       {/* Protected routes - require unlocked state */}
       <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
