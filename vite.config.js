@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
         name: 'DigiLocker by OM',
         short_name: 'DigiLocker',
@@ -20,6 +20,7 @@ export default defineConfig({
         start_url: '/',
         id: 'digilocker-by-om',
         icons: [
+<<<<<<< HEAD
           {
             src: '/icons/icon-72.png',
             sizes: '72x72',
@@ -50,6 +51,13 @@ export default defineConfig({
             type: 'image/png',
             purpose: 'any maskable'
           }
+=======
+          { src: '/icons/icon-72.png',  sizes: '72x72',  type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/icon-96.png',  sizes: '96x96',  type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/icon-128.png', sizes: '128x128',type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/icon-192.png', sizes: '192x192',type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/icon-512.png', sizes: '512x512',type: 'image/png', purpose: 'any maskable' },
+>>>>>>> bcd3b56
         ]
       },
       workbox: {
@@ -59,6 +67,7 @@ export default defineConfig({
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,json,woff2}'],
+<<<<<<< HEAD
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -83,6 +92,8 @@ export default defineConfig({
             }
           }
         ]
+=======
+>>>>>>> bcd3b56
       }
     })
   ],
