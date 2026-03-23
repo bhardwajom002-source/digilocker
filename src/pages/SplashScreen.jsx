@@ -1,114 +1,97 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function SplashScreen() {
-  const [fadeOut, setFadeOut] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(0);
   const navigate = useNavigate();
+  const { isSetupComplete, isUnlocked, isLoading } = useAuth();
+  const [dot, setDot] = useState(0);
 
+  // Animate dots
   useEffect(() => {
-    // Simulate loading progress
-    const progressInterval = setInterval(() => {
-      setLoadingProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + Math.random() * 15;
-      });
-    }, 200);
+    const t = setInterval(() => setDot(d => (d + 1) % 3), 400);
+    return () => clearInterval(t);
+  }, []);
 
-    // Start fade out after 2.5 seconds
-    const fadeTimer = setTimeout(() => {
-      setFadeOut(true);
+  // Navigate after 2.5s
+  useEffect(() => {
+    if (isLoading) return;
+    const timer = setTimeout(() => {
+      if (!isSetupComplete) {
+        navigate('/auth', { replace: true });
+      } else if (isUnlocked) {
+        navigate('/', { replace: true });
+      } else {
+        navigate('/login', { replace: true });
+      }
     }, 2500);
-
-    // Navigate to auth after 3 seconds
-    const navigateTimer = setTimeout(() => {
-      navigate('/auth');
-    }, 3000);
-
-    return () => {
-      clearInterval(progressInterval);
-      clearTimeout(fadeTimer);
-      clearTimeout(navigateTimer);
-    };
-  }, [navigate]);
+    return () => clearTimeout(timer);
+  }, [isLoading, isSetupComplete, isUnlocked, navigate]);
 
   return (
-    <div 
-      className={`min-h-screen w-full flex flex-col items-center justify-center transition-all duration-700 ${
-        fadeOut ? 'opacity-0 scale-110' : 'opacity-100 scale-100'
-      }`}
-      style={{
-        backgroundColor: '#1a73e8',
-        background: 'linear-gradient(135deg, #1a73e8 0%, #0d47a1 50%, #1565c0 100%)',
-      }}
-    >
-      {/* Animated background patterns */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-white/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-      </div>
+    <div className="min-h-screen flex flex-col items-center justify-center safe-top"
+         style={{ background: 'linear-gradient(160deg, #1e40af 0%, #4f46e5 50%, #7c3aed 100%)' }}>
 
-      {/* Animated Logo Container */}
-      <div className="relative mb-10">
-        {/* Glow effect */}
-        <div className="absolute inset-0 bg-white/30 blur-3xl rounded-full scale-150 animate-pulse"></div>
-        
-        {/* Icon with animation */}
-        <div className="relative w-28 h-28 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/30 shadow-2xl animate-float">
-          <svg 
-            className="w-16 h-16 text-white drop-shadow-lg" 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path 
-              strokeLinecap="round" 
-              strokeLinejoin="round" 
-              strokeWidth={1.5} 
-              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" 
-            />
+      {/* Logo */}
+      <div className="animate-scale-in"
+           style={{ animationDelay: '0s' }}>
+        <div style={{
+          width: 80, height: 80,
+          background: 'rgba(255,255,255,0.15)',
+          border: '1px solid rgba(255,255,255,0.25)',
+          borderRadius: 22,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: 20,
+          backdropFilter: 'blur(10px)',
+        }}>
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+            <path d="M20 4C15.5 4 12 7.5 12 12v3H9v21h22V15h-3v-3c0-4.5-3.5-8-8-8zm0 4c2.8 0 4 2.2 4 4v3H16v-3c0-1.8 1.2-4 4-4zm0 13a3 3 0 110 6 3 3 0 010-6z"
+                  fill="white"/>
           </svg>
         </div>
       </div>
 
       {/* App Name */}
-      <h1 
-        className="text-5xl font-bold text-white mb-3 tracking-wide relative z-10"
-        style={{ 
-          textShadow: '0 4px 20px rgba(0,0,0,0.3)',
-          fontFamily: 'system-ui, -apple-system, sans-serif'
-        }}
-      >
-        DigiLocker
-      </h1>
-
-      {/* Subtitle */}
-      <p className="text-white/90 text-xl font-medium mb-8 relative z-10">
-        by OM
-      </p>
-
-      {/* Loading progress bar */}
-      <div className="w-48 h-1.5 bg-white/20 rounded-full overflow-hidden mb-4">
-        <div 
-          className="h-full bg-white rounded-full transition-all duration-300 ease-out"
-          style={{ width: `${Math.min(loadingProgress, 100)}%` }}
-        ></div>
+      <div className="stagger-1 text-center">
+        <h1 style={{
+          fontSize: 34,
+          fontWeight: 800,
+          color: '#fff',
+          letterSpacing: -1,
+          fontFamily: "'Plus Jakarta Sans', sans-serif",
+          lineHeight: 1.1,
+        }}>
+          DigiLocker
+        </h1>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', marginTop: 6, fontWeight: 600 }}>
+          by OM
+        </p>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>
+          Your Private Document Vault
+        </p>
       </div>
 
-      {/* Loading text */}
-      <p className="text-white/60 text-sm">
-        {loadingProgress < 30 ? 'Loading...' : 
-         loadingProgress < 60 ? 'Preparing your vault...' :
-         loadingProgress < 90 ? 'Almost ready...' : 'Welcome!'}
-      </p>
+      {/* Animated dots */}
+      <div className="stagger-3" style={{ display: 'flex', gap: 8, marginTop: 48 }}>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            width: dot === i ? 22 : 8,
+            height: 8,
+            borderRadius: 4,
+            background: dot === i ? '#fff' : 'rgba(255,255,255,0.35)',
+            transition: 'all 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+          }} />
+        ))}
+      </div>
 
-      {/* Version */}
-      <p className="absolute bottom-8 text-white/40 text-xs">
-        Version 1.0.0
-      </p>
+      {/* Bottom tagline */}
+      <div className="stagger-5" style={{
+        position: 'absolute', bottom: 40,
+        fontSize: 11, color: 'rgba(255,255,255,0.35)',
+        letterSpacing: 1, textTransform: 'uppercase',
+      }}>
+        Secured with AES-256 Encryption
+      </div>
     </div>
   );
 }

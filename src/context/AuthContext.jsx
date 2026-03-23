@@ -1,275 +1,366 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getAppConfig, updateAppConfig, addActivityLog } from '../db';
-import { deriveKey, hashPassword, hashPin } from '../crypto/encryption';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import {
+  getAppConfig, updateAppConfig, isEmailRegistered,
+  isUserLoggedIn, setLoggedIn, addActivityLog
+} from '../db';
+import { deriveKey, hashPassword, hashPin, generateSalt } from '../crypto/encryption';
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSetupComplete, setIsSetupComplete] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(false);
-  const [cryptoKey, setCryptoKey] = useState(null);
-  const [userName, setUserName] = useState('');
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [lockoutUntil, setLockoutUntil] = useState(null);
-  const [autoLockMinutes, setAutoLockMinutes] = useState(0);
-  
-  let autoLockTimer = null;
+// In-memory key store (never persisted)
+const keyStore = { current: null };
 
-  // Check if app is set up on load
+export function AuthProvider({ children }) {
+  const [isLoading,       setIsLoading]       = useState(true);
+  const [isSetupComplete, setIsSetupComplete] = useState(false);
+  const [isUnlocked,      setIsUnlocked]      = useState(false);
+  const [userName,        setUserName]        = useState('');
+  const [userEmail,       setUserEmail]       = useState('');
+  const [failedAttempts,  setFailedAttempts]  = useState(0);
+  const [lockoutUntil,    setLockoutUntil]    = useState(null);
+  const [autoLockMinutes, setAutoLockMinutes] = useState(0);
+  const [theme,           setTheme]           = useState('light');
+  const lockTimerRef = useRef(null);
+
+  // ─── Initialize on app start ─────────────────────────────────
   useEffect(() => {
-    async function checkSetup() {
+    async function init() {
       try {
         const config = await getAppConfig();
-        if (config?.setupComplete) {
-          setIsSetupComplete(true);
-          setUserName(config.userName || '');
-          setAutoLockMinutes(config.autoLockMinutes || 10);
-        } else {
+
+        if (!config?.setupComplete) {
+          // First time user
           setIsSetupComplete(false);
+          setIsLoading(false);
+          return;
         }
-      } catch (error) {
-        console.error('Error checking setup:', error);
+
+        setIsSetupComplete(true);
+        setUserName(config.userName || '');
+        setUserEmail(config.email || '');
+        setAutoLockMinutes(config.autoLockMinutes || 0);
+
+        // Apply saved theme
+        const savedTheme = config.theme || localStorage.getItem('theme') || 'light';
+        setTheme(savedTheme);
+        applyTheme(savedTheme);
+
+        // ✅ KEY FIX: Auto-restore session if user was logged in
+        if (config.isLoggedIn === true) {
+          // User was logged in — restore session without password
+          setIsUnlocked(true);
+        }
+
+      } catch (err) {
+        console.error('Auth init error:', err);
       } finally {
         setIsLoading(false);
       }
     }
-    checkSetup();
+    init();
   }, []);
 
-  // Auto-lock functionality
+  // ─── Theme ───────────────────────────────────────────────────
+  function applyTheme(t) {
+    if (t === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme', t);
+  }
+
+  const toggleTheme = useCallback(() => {
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    applyTheme(next);
+    updateAppConfig({ theme: next }).catch(console.error);
+  }, [theme]);
+
+  // ─── Auto-lock timer ─────────────────────────────────────────
   useEffect(() => {
     if (!isUnlocked || autoLockMinutes === 0) return;
-
-    const resetActivityTimer = () => {
-      if (autoLockTimer) clearTimeout(autoLockTimer);
-      
-      autoLockTimer = setTimeout(() => {
-        lock();
-      }, autoLockMinutes * 60 * 1000);
+    const reset = () => {
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+      lockTimerRef.current = setTimeout(() => lock(), autoLockMinutes * 60 * 1000);
     };
-
-    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-    events.forEach(event => {
-      document.addEventListener(event, resetActivityTimer);
-    });
-
-    resetActivityTimer();
-
+    const events = ['mousedown','keydown','touchstart','scroll'];
+    events.forEach(e => document.addEventListener(e, reset));
+    reset();
     return () => {
-      if (autoLockTimer) clearTimeout(autoLockTimer);
-      events.forEach(event => {
-        document.removeEventListener(event, resetActivityTimer);
-      });
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+      events.forEach(e => document.removeEventListener(e, reset));
     };
   }, [isUnlocked, autoLockMinutes]);
 
-  // Check lockout
-  useEffect(() => {
-    if (lockoutUntil && Date.now() >= lockoutUntil) {
-      setLockoutUntil(null);
-      setFailedAttempts(0);
-    }
-  }, [lockoutUntil]);
-
-  const setup = useCallback(async (password, pin, name) => {
+  // ─── REGISTER ────────────────────────────────────────────────
+  const register = useCallback(async (name, email, password, pin) => {
     try {
-      const salt = crypto.getRandomValues(new Uint8Array(32)).reduce((acc, b) => 
-        acc + b.toString(16).padStart(2, '0'), ''
-      );
-      
-      const passwordHash = await hashPassword(password);
-      const pinHash = await hashPin(pin);
-      
-      // Derive the encryption key
+      // Check if already registered
+      const emailExists = await isEmailRegistered(email);
+      if (emailExists) {
+        return {
+          success: false,
+          alreadyExists: true,
+          error: 'You are already registered! Please login with your email.',
+        };
+      }
+
+      // Also check if ANY account exists (single-user app)
+      const config = await getAppConfig();
+      if (config?.setupComplete) {
+        return {
+          success: false,
+          alreadyExists: true,
+          error: `An account already exists for ${config.email}. Please login.`,
+        };
+      }
+
+      const salt = generateSalt();
+      const pwdHash = await hashPassword(password, salt);
+      const pinHash = await hashPin(pin, salt);
       const key = await deriveKey(password, salt);
-      
-      // Store the key in memory
-      setCryptoKey(key);
-      
-      // Save config to IndexedDB
+
+      // Store key in memory
+      keyStore.current = key;
+
       await updateAppConfig({
         setupComplete: true,
-        userName: name,
+        email: email.toLowerCase().trim(),
+        userName: name.trim(),
         salt,
-        passwordHash,
+        passwordHash: pwdHash,
         pinHash,
-        biometricEnabled: false,
+        isLoggedIn: true,
         autoLockMinutes: 0,
         theme: 'light',
-        language: 'en',
         createdAt: new Date(),
-        lastUnlocked: new Date(),
+        lastLogin: new Date(),
       });
-      
-      setUserName(name);
+
+      setUserName(name.trim());
+      setUserEmail(email.toLowerCase().trim());
       setIsSetupComplete(true);
       setIsUnlocked(true);
-      
-      await addActivityLog('app_setup', { userName: name });
-      
+
+      await addActivityLog('REGISTER', { userName: name, email });
       return { success: true };
-    } catch (error) {
-      console.error('Setup error:', error);
-      return { success: false, error: error.message };
+
+    } catch (err) {
+      console.error('Register error:', err);
+      return { success: false, error: 'Registration failed. Please try again.' };
     }
   }, []);
 
-  const unlock = useCallback(async (password) => {
-    // Check lockout
-    if (lockoutUntil && Date.now() < lockoutUntil) {
-      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000 / 60);
-      return { success: false, error: `Locked for ${remaining} minutes` };
-    }
-
+  // ─── LOGIN ───────────────────────────────────────────────────
+  const login = useCallback(async (password) => {
     try {
+      // Lockout check
+      if (lockoutUntil && Date.now() < lockoutUntil) {
+        const mins = Math.ceil((lockoutUntil - Date.now()) / 60000);
+        return { success: false, error: `Account locked for ${mins} more minutes.` };
+      }
+
       const config = await getAppConfig();
-      if (!config) {
-        return { success: false, error: 'No configuration found' };
+
+      if (!config?.setupComplete) {
+        return { success: false, error: 'No account found. Please register first.' };
       }
 
-      // Verify password
-      const passwordHash = await hashPassword(password);
-      if (passwordHash !== config.passwordHash) {
-        const newAttempts = failedAttempts + 1;
-        setFailedAttempts(newAttempts);
-        
-        if (newAttempts >= 5) {
-          setLockoutUntil(Date.now() + 30 * 60 * 1000); // 30 min lockout
-          return { success: false, error: 'Too many attempts. Locked for 30 minutes.' };
+      // Password check
+      const pwdHash = await hashPassword(password, config.salt);
+      if (pwdHash !== config.passwordHash) {
+        const attempts = failedAttempts + 1;
+        setFailedAttempts(attempts);
+        if (attempts >= 5) {
+          const lockTime = Date.now() + 30 * 60 * 1000;
+          setLockoutUntil(lockTime);
+          return { success: false, error: 'Too many attempts! Account locked for 30 minutes.' };
         }
-        
-        return { success: false, error: `Invalid password. ${5 - newAttempts} attempts remaining.` };
+        return {
+          success: false,
+          error: `Wrong password. ${5 - attempts} attempts remaining.`
+        };
       }
 
-      // Derive encryption key
+      // Derive crypto key
       const key = await deriveKey(password, config.salt);
-      
-      // Store key in memory
-      setCryptoKey(key);
+      keyStore.current = key;
+
+      // Save login state
+      await setLoggedIn(true);
+      await updateAppConfig({ lastLogin: new Date() });
+
       setIsUnlocked(true);
+      setUserName(config.userName);
       setFailedAttempts(0);
-      
-      // Update last unlocked time
-      await updateAppConfig({ lastUnlocked: new Date() });
-      
-      await addActivityLog('app_unlock', { userName: config.userName });
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Unlock error:', error);
-      return { success: false, error: error.message };
+      setLockoutUntil(null);
+
+      await addActivityLog('LOGIN', { email: config.email });
+      return { success: true, userName: config.userName };
+
+    } catch (err) {
+      console.error('Login error:', err);
+      return { success: false, error: 'Login failed. Please try again.' };
     }
   }, [failedAttempts, lockoutUntil]);
 
-  const unlockWithPin = useCallback(async (pin) => {
-    if (lockoutUntil && Date.now() < lockoutUntil) {
-      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000 / 60);
-      return { success: false, error: `Locked for ${remaining} minutes` };
-    }
-
+  // ─── LOGIN WITH PIN ───────────────────────────────────────────
+  const loginWithPin = useCallback(async (pin) => {
     try {
-      const config = await getAppConfig();
-      if (!config) {
-        return { success: false, error: 'No configuration found' };
+      if (lockoutUntil && Date.now() < lockoutUntil) {
+        const mins = Math.ceil((lockoutUntil - Date.now()) / 60000);
+        return { success: false, error: `Locked for ${mins} more minutes.` };
       }
 
-      const pinHash = await hashPin(pin);
+      const config = await getAppConfig();
+      if (!config?.setupComplete) {
+        return { success: false, error: 'No account found.' };
+      }
+
+      const pinHash = await hashPin(pin, config.salt);
       if (pinHash !== config.pinHash) {
-        const newAttempts = failedAttempts + 1;
-        setFailedAttempts(newAttempts);
-        
-        if (newAttempts >= 5) {
+        const attempts = failedAttempts + 1;
+        setFailedAttempts(attempts);
+        if (attempts >= 5) {
           setLockoutUntil(Date.now() + 30 * 60 * 1000);
-          return { success: false, error: 'Too many attempts. Locked for 30 minutes.' };
+          return { success: false, error: 'Too many attempts! Locked for 30 minutes.' };
         }
-        
-        return { success: false, error: `Invalid PIN. ${5 - newAttempts} attempts remaining.` };
+        return {
+          success: false,
+          error: `Wrong PIN. ${5 - attempts} attempts remaining.`
+        };
       }
 
-      const key = await deriveKey(pin, config.salt);
-      setCryptoKey(key);
+      // PIN verified — derive key using PIN-based derivation
+      const key = await deriveKey('PIN_KEY::' + pin, config.salt);
+      keyStore.current = key;
+
+      await setLoggedIn(true);
+      await updateAppConfig({ lastLogin: new Date() });
+
       setIsUnlocked(true);
+      setUserName(config.userName);
       setFailedAttempts(0);
-      
-      await updateAppConfig({ lastUnlocked: new Date() });
-      await addActivityLog('app_unlock_pin', { userName: config.userName });
-      
-      return { success: true };
-    } catch (error) {
-      console.error('PIN unlock error:', error);
-      return { success: false, error: error.message };
+      setLockoutUntil(null);
+
+      await addActivityLog('LOGIN_PIN', {});
+      return { success: true, userName: config.userName };
+
+    } catch (err) {
+      console.error('PIN login error:', err);
+      return { success: false, error: 'PIN login failed.' };
     }
   }, [failedAttempts, lockoutUntil]);
 
-  const lock = useCallback(async () => {
-    if (cryptoKey) {
-      const config = await getAppConfig();
-      await addActivityLog('app_lock', { userName: config?.userName });
-    }
-    
-    setCryptoKey(null);
-    setIsUnlocked(false);
-  }, [cryptoKey]);
-
-  const changePassword = useCallback(async (currentPassword, newPassword) => {
+  // ─── FORGOT PASSWORD (Offline — PIN based reset) ──────────────
+  const verifyEmailForReset = useCallback(async (email) => {
     try {
       const config = await getAppConfig();
-      const passwordHash = await hashPassword(currentPassword);
-      
-      if (passwordHash !== config.passwordHash) {
-        return { success: false, error: 'Current password is incorrect' };
+      if (!config?.setupComplete) {
+        return { success: false, error: 'No account found.' };
+      }
+      if (config.email !== email.toLowerCase().trim()) {
+        return { success: false, error: 'Email not found in our records.' };
+      }
+      // Email matches — allow PIN verification
+      return { success: true, message: 'Email verified! Enter your backup PIN to reset password.' };
+    } catch {
+      return { success: false, error: 'Verification failed.' };
+    }
+  }, []);
+
+  const resetPasswordWithPin = useCallback(async (email, pin, newPassword) => {
+    try {
+      const config = await getAppConfig();
+
+      // Verify email
+      if (config.email !== email.toLowerCase().trim()) {
+        return { success: false, error: 'Email mismatch.' };
       }
 
-      const newSalt = crypto.getRandomValues(new Uint8Array(32)).reduce((acc, b) => 
-        acc + b.toString(16).padStart(2, '0'), ''
-      );
-      const newPasswordHash = await hashPassword(newPassword);
+      // Verify PIN
+      const pinHash = await hashPin(pin, config.salt);
+      if (pinHash !== config.pinHash) {
+        return { success: false, error: 'Wrong PIN. Cannot reset password.' };
+      }
+
+      if (newPassword.length < 8) {
+        return { success: false, error: 'Password must be at least 8 characters.' };
+      }
+
+      // Generate new salt + hash
+      const newSalt = generateSalt();
+      const newPwdHash = await hashPassword(newPassword, newSalt);
+      const newPinHash = await hashPin(pin, newSalt);
       const newKey = await deriveKey(newPassword, newSalt);
 
       await updateAppConfig({
         salt: newSalt,
-        passwordHash: newPasswordHash,
+        passwordHash: newPwdHash,
+        pinHash: newPinHash,
+        lastPasswordReset: new Date(),
       });
 
-      setCryptoKey(newKey);
-      
-      await addActivityLog('password_changed', { userName: config.userName });
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Change password error:', error);
-      return { success: false, error: error.message };
+      keyStore.current = newKey;
+      setIsUnlocked(true);
+      await setLoggedIn(true);
+
+      await addActivityLog('PASSWORD_RESET', { email });
+      return { success: true, message: 'Password reset successfully!' };
+
+    } catch (err) {
+      return { success: false, error: 'Reset failed. Try again.' };
     }
   }, []);
 
-  const changePin = useCallback(async (newPin) => {
+  // ─── LOGOUT ───────────────────────────────────────────────────
+  const logout = useCallback(async () => {
     try {
-      const pinHash = await hashPin(newPin);
-      await updateAppConfig({ pinHash });
-      
-      await addActivityLog('pin_changed', {});
-      
-      return { success: true };
-    } catch (error) {
-      console.error('Change PIN error:', error);
-      return { success: false, error: error.message };
-    }
+      keyStore.current = null;
+      await setLoggedIn(false);
+      await addActivityLog('LOGOUT', { userName });
+    } catch {}
+    setIsUnlocked(false);
+    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+  }, [userName]);
+
+  // ─── LOCK (keep session, just lock screen) ───────────────────
+  const lock = useCallback(async () => {
+    keyStore.current = null;
+    setIsUnlocked(false);
+    // NOTE: isLoggedIn stays true in DB — user just needs to re-enter password
+    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
   }, []);
 
+  // ─── UPDATE SETTINGS ─────────────────────────────────────────
   const updateSettings = useCallback(async (settings) => {
     try {
       await updateAppConfig(settings);
-      if (settings.autoLockMinutes !== undefined) {
-        setAutoLockMinutes(settings.autoLockMinutes);
-      }
-      if (settings.userName !== undefined) {
-        setUserName(settings.userName);
-      }
+      if (settings.autoLockMinutes !== undefined) setAutoLockMinutes(settings.autoLockMinutes);
+      if (settings.userName) setUserName(settings.userName);
       return { success: true };
-    } catch (error) {
-      console.error('Update settings error:', error);
-      return { success: false, error: error.message };
+    } catch {
+      return { success: false };
+    }
+  }, []);
+
+  // ─── CHANGE PASSWORD ─────────────────────────────────────────
+  const changePassword = useCallback(async (currentPwd, newPwd) => {
+    try {
+      const config = await getAppConfig();
+      const hash = await hashPassword(currentPwd, config.salt);
+      if (hash !== config.passwordHash) {
+        return { success: false, error: 'Current password is incorrect.' };
+      }
+      const newSalt = generateSalt();
+      const newHash = await hashPassword(newPwd, newSalt);
+      const newKey = await deriveKey(newPwd, newSalt);
+      await updateAppConfig({ salt: newSalt, passwordHash: newHash });
+      keyStore.current = newKey;
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Password change failed.' };
     }
   }, []);
 
@@ -277,18 +368,23 @@ export function AuthProvider({ children }) {
     isLoading,
     isSetupComplete,
     isUnlocked,
-    cryptoKey,
+    cryptoKey: keyStore.current,
     userName,
+    userEmail,
     failedAttempts,
     lockoutUntil,
     autoLockMinutes,
-    setup,
-    unlock,
-    unlockWithPin,
+    theme,
+    toggleTheme,
+    register,
+    login,
+    loginWithPin,
+    logout,
     lock,
-    changePassword,
-    changePin,
     updateSettings,
+    changePassword,
+    verifyEmailForReset,
+    resetPasswordWithPin,
   };
 
   return (
@@ -300,8 +396,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 }

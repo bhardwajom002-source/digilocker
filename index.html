@@ -24,30 +24,10 @@
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 
     <title>DigiLocker</title>
-    
-    <style>
-      /* Prevent overscroll/bounce effect */
-      html, body {
-        overscroll-behavior: none;
-        -webkit-overflow-scrolling: touch;
-        height: 100%;
-        overflow: hidden;
-      }
-      
-      /* Hide scrollbar but keep functionality */
-      ::-webkit-scrollbar {
-        display: none;
-      }
-      
-      /* Safe area padding for notched devices */
-      body {
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-      }
-    </style>
   </head>
 
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="./src/main.jsx"></script>
   </body>
 </html>

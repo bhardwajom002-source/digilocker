@@ -1,233 +1,198 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, User, Eye, EyeOff, ArrowLeft, Sparkles, Shield } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+function getStrength(p) {
+  if (!p) return { score: 0, label: '', color: '' };
+  let s = 0;
+  if (p.length >= 8) s++;
+  if (/[A-Z]/.test(p)) s++;
+  if (/[0-9]/.test(p)) s++;
+  if (/[^A-Za-z0-9]/.test(p)) s++;
+  const map = [
+    { label: '', color: '' },
+    { label: 'Weak', color: '#EF4444' },
+    { label: 'Fair', color: '#F59E0B' },
+    { label: 'Good', color: '#3B82F6' },
+    { label: 'Strong', color: '#10B981' },
+  ];
+  return { score: s, ...map[s] };
+}
 
 export default function RegisterScreen() {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: ''
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [isAnimating, setIsAnimating] = useState(false);
-  
   const navigate = useNavigate();
   const { setup } = useAuth();
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', pin: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const strength = getStrength(form.password);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setError('');
-  };
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validation
-    if (!formData.name.trim()) {
-      setError('Please enter your name');
-      return;
-    }
-    if (!formData.email.trim()) {
-      setError('Please enter your email');
-      return;
-    }
-    if (!formData.password || formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
-    setIsLoading(true);
     setError('');
+    if (!form.name.trim()) return setError('Name is required');
+    if (!form.email.trim()) return setError('Email is required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return setError('Invalid email format');
+    if (form.password.length < 8) return setError('Password must be at least 8 characters');
+    if (form.password !== form.confirm) return setError('Passwords do not match');
+    if (form.pin.length < 4 || form.pin.length > 6) return setError('PIN must be 4-6 digits');
 
-    try {
-      // Use the first 6 characters of password as PIN
-      const pin = formData.password.slice(0, 6);
-      const result = await setup(formData.password, pin, formData.name);
-      
-      if (result.success) {
-        setIsAnimating(true);
-        setTimeout(() => {
-          navigate('/');
-        }, 300);
-      } else {
-        setError(result.error || 'Registration failed. Please try again.');
-      }
-    } catch {
-      setError('An error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
+    setLoading(true);
+    const result = await setup(form.password, form.pin, form.name, form.email);
+    setLoading(false);
+
+    if (result.success) {
+      toast.success('Vault created successfully! 🎉');
+      navigate('/', { replace: true });
+    } else if (result.alreadyExists) {
+      setError(result.error);
+    } else {
+      setError(result.error || 'Something went wrong');
     }
-  };
-
-  const handleBack = () => {
-    setIsAnimating(true);
-    setTimeout(() => {
-      navigate('/auth');
-    }, 300);
   };
 
   return (
-    <div 
-      className={`min-h-screen w-full flex flex-col px-6 py-8 transition-all duration-300 ${
-        isAnimating ? 'opacity-0 translate-x-[-20px]' : 'opacity-100 translate-x-0'
-      }`}
-      style={{ 
-        background: 'linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)',
-        backgroundColor: '#f8fafc'
-      }}
-    >
+    <div className="page-enter min-h-screen bg-white dark:bg-slate-900 flex flex-col safe-top safe-bottom">
+
       {/* Header */}
-      <div className="flex items-center mb-8">
+      <div className="flex items-center gap-3 px-5 pt-5 pb-4 stagger-1">
         <button
-          onClick={handleBack}
-          className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm hover:shadow-md transition-shadow"
-        >
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
+          onClick={() => navigate('/auth')}
+          style={{
+            width: 38, height: 38,
+            background: '#F8FAFC', border: '1px solid #E2E8F0',
+            borderRadius: 12, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+          }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M11 4L6 9l5 5" stroke="#64748B" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
         </button>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A',
+                       fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              className="dark:text-white">
+            Create Your Vault
+          </h2>
+          <p style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }}>
+            Set up your secure document locker
+          </p>
+        </div>
       </div>
 
-      {/* Title Section */}
-      <div className="mb-8">
-        <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
-          <Sparkles className="w-7 h-7 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          Create Account 🚀
-        </h1>
-        <p className="text-gray-500">
-          Start securing your documents with DigiLocker
-        </p>
+      {/* Progress dots */}
+      <div className="flex justify-center gap-2 mb-4 stagger-2">
+        {[0,1,2].map(i => (
+          <div key={i} style={{
+            width: i === 0 ? 20 : 6, height: 6,
+            borderRadius: 3,
+            background: i === 0 ? '#2563EB' : '#E2E8F0',
+            transition: 'all 0.3s',
+          }} />
+        ))}
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit} className="flex-1">
-        <div className="space-y-5">
-          {/* Name Field */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Full Name
-            </label>
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2">
-                <User className="w-5 h-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Enter your full name"
-                className="w-full py-4 pl-12 pr-4 bg-white border border-gray-200 rounded-2xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm"
-              />
-            </div>
-          </div>
+      <form onSubmit={handleSubmit}
+            className="flex-1 overflow-y-auto px-5 flex flex-col gap-4 pb-8">
 
-          {/* Email Field */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email Address
-            </label>
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2">
-                <Mail className="w-5 h-5 text-gray-400" />
-              </div>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="Enter your email"
-                className="w-full py-4 pl-12 pr-4 bg-white border border-gray-200 rounded-2xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm"
-              />
-            </div>
-          </div>
-
-          {/* Password Field */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2">
-                <Lock className="w-5 h-5 text-gray-400" />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Create a password (min 6 chars)"
-                className="w-full py-4 pl-12 pr-14 bg-white border border-gray-200 rounded-2xl text-gray-800 placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all shadow-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5 text-gray-400" />
-                ) : (
-                  <Eye className="w-5 h-5 text-gray-400" />
-                )}
+        {error && (
+          <div style={{
+            background: '#FEF2F2', color: '#B91C1C',
+            border: '1px solid #FCA5A5',
+            borderRadius: 12, padding: '10px 14px',
+            fontSize: 13, fontWeight: 500,
+          }}
+          className="stagger-1">
+            {error}
+            {error.includes('already exists') && (
+              <button type="button"
+                onClick={() => navigate('/login')}
+                style={{ display: 'block', marginTop: 6, color: '#2563EB',
+                         fontSize: 12, fontWeight: 700, background: 'none',
+                         border: 'none', cursor: 'pointer', padding: 0 }}>
+                Go to Login →
               </button>
-            </div>
-            {/* Password hint */}
-            <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-              <Shield className="w-3 h-3" />
-              Use at least 6 characters. This cannot be recovered!
-            </p>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {error}
-            </div>
-          )}
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-4 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-2xl transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 mt-4"
-          >
-            {isLoading ? (
-              <>
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Creating Account...
-              </>
-            ) : (
-              <>
-                Create Account
-                <Sparkles className="w-5 h-5" />
-              </>
             )}
-          </button>
-        </div>
-      </form>
+          </div>
+        )}
 
-      {/* Login Link */}
-      <div className="text-center mt-8">
-        <p className="text-gray-500">
-          Already have an account?{' '}
-          <button
-            onClick={() => navigate('/login')}
-            className="text-indigo-600 font-semibold hover:text-indigo-700 transition-colors"
-          >
-            Login
-          </button>
+        {[
+          { key: 'name',     label: 'Full Name',        type: 'text',     placeholder: 'Your full name' },
+          { key: 'email',    label: 'Email Address',     type: 'email',    placeholder: 'your@email.com' },
+          { key: 'password', label: 'Master Password',   type: 'password', placeholder: 'Min 8 characters' },
+          { key: 'confirm',  label: 'Confirm Password',  type: 'password', placeholder: 'Repeat password' },
+          { key: 'pin',      label: 'Backup PIN (4-6 digits)', type: 'password', placeholder: 'e.g. 1234' },
+        ].map((f, i) => (
+          <div key={f.key} className={`stagger-${i + 2}`}>
+            <label style={{
+              fontSize: 11, fontWeight: 700, color: '#64748B',
+              textTransform: 'uppercase', letterSpacing: '0.5px',
+              display: 'block', marginBottom: 6,
+            }}>
+              {f.label}
+            </label>
+            <input
+              type={f.type}
+              placeholder={f.placeholder}
+              value={form[f.key]}
+              onChange={e => set(f.key, e.target.value)}
+              style={{
+                width: '100%',
+                background: '#F8FAFC', border: '1.5px solid #E2E8F0',
+                borderRadius: 14, padding: '12px 14px',
+                fontSize: 14, color: '#0F172A',
+                fontFamily: 'Inter, sans-serif', outline: 'none',
+                transition: 'border-color 0.2s, background 0.2s',
+              }}
+              className="dark:bg-slate-800 dark:border-slate-600 dark:text-white"
+              onFocus={e => { e.target.style.borderColor = '#2563EB'; e.target.style.background = '#fff'; }}
+              onBlur={e => { e.target.style.borderColor = '#E2E8F0'; e.target.style.background = '#F8FAFC'; }}
+            />
+            {/* Password strength */}
+            {f.key === 'password' && form.password && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ height: 4, background: '#E2E8F0', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 2,
+                    width: `${strength.score * 25}%`,
+                    background: strength.color,
+                    transition: 'width 0.4s, background 0.3s',
+                  }} />
+                </div>
+                <span style={{ fontSize: 11, color: strength.color, fontWeight: 600, marginTop: 3, display: 'block' }}>
+                  {strength.label}
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+
+        <button type="submit" disabled={loading}
+                className="btn-press"
+                style={{
+                  background: loading ? '#93C5FD' : '#2563EB',
+                  color: '#fff', border: 'none',
+                  borderRadius: 16, padding: '15px',
+                  fontSize: 15, fontWeight: 700,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  marginTop: 4,
+                }}>
+          {loading ? 'Creating Vault...' : 'Create Vault 🔐'}
+        </button>
+
+        <p style={{ fontSize: 13, color: '#64748B', textAlign: 'center' }}>
+          Already registered?{' '}
+          <span style={{ color: '#2563EB', fontWeight: 700, cursor: 'pointer' }}
+                onClick={() => navigate('/login')}>
+            Login here
+          </span>
         </p>
-      </div>
+      </form>
     </div>
   );
 }

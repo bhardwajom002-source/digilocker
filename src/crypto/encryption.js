@@ -1,65 +1,41 @@
-// AES-256-GCM encryption utilities using Web Crypto API
+// AES-256-GCM via Web Crypto API
 
-// Generate a random salt
 export function generateSalt() {
-  return bufferToHex(crypto.getRandomValues(new Uint8Array(32)));
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Generate a random IV
-function generateIV() {
-  return crypto.getRandomValues(new Uint8Array(12));
-}
-
-// Convert ArrayBuffer to hex string
-function bufferToHex(buffer) {
-  return Array.from(new Uint8Array(buffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-// Convert hex string to ArrayBuffer
 function hexToBuffer(hex) {
   const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
+  for (let i = 0; i < hex.length; i += 2)
+    bytes[i/2] = parseInt(hex.slice(i, i+2), 16);
   return bytes.buffer;
 }
 
-// Convert ArrayBuffer to base64
+function bufferToHex(buffer) {
+  return Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
 function bufferToBase64(buffer) {
-  const binary = String.fromCharCode(...new Uint8Array(buffer));
-  return btoa(binary);
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
-// Convert base64 to ArrayBuffer
-function base64ToBuffer(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
+function base64ToBuffer(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes.buffer;
 }
 
-// Derive encryption key from password using PBKDF2
+// PBKDF2 key derivation — same inputs = same output (deterministic)
 export async function deriveKey(password, salt) {
-  const encoder = new TextEncoder();
+  const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits', 'deriveKey']
+    'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
   );
-  
   return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: hexToBuffer(salt),
-      iterations: 250000,
-      hash: 'SHA-256'
-    },
+    { name: 'PBKDF2', salt: hexToBuffer(salt), iterations: 100000, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -67,106 +43,68 @@ export async function deriveKey(password, salt) {
   );
 }
 
-// Encrypt file data (ArrayBuffer)
-export async function encryptFile(arrayBuffer, cryptoKey) {
-  const iv = generateIV();
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    arrayBuffer
-  );
-  
-  return {
-    encryptedData: bufferToBase64(encrypted),
-    iv: bufferToHex(iv),
-  };
+// Hash password with salt for storage
+export async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode(password + '::' + salt);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return bufferToHex(hash);
 }
 
-// Decrypt file data
+// Hash PIN with salt
+export async function hashPin(pin, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode('PIN::' + pin + '::' + salt);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return bufferToHex(hash);
+}
+
+// Encrypt file
+export async function encryptFile(arrayBuffer, cryptoKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, cryptoKey, arrayBuffer
+  );
+  return { encryptedData: bufferToBase64(encrypted), iv: bufferToHex(iv) };
+}
+
+// Decrypt file
 export async function decryptFile(encryptedBase64, ivHex, cryptoKey) {
-  const decrypted = await crypto.subtle.decrypt(
+  return crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: hexToBuffer(ivHex) },
     cryptoKey,
     base64ToBuffer(encryptedBase64)
   );
-  
-  return decrypted;
 }
 
-// Encrypt string data
+// Encrypt string
 export async function encryptString(str, cryptoKey) {
-  const encoder = new TextEncoder();
-  const buffer = encoder.encode(str);
-  return encryptFile(buffer, cryptoKey);
+  return encryptFile(new TextEncoder().encode(str), cryptoKey);
 }
 
-// Decrypt string data
+// Decrypt string
 export async function decryptString(encryptedBase64, ivHex, cryptoKey) {
-  const buffer = await decryptFile(encryptedBase64, ivHex, cryptoKey);
-  const decoder = new TextDecoder();
-  return decoder.decode(buffer);
+  const buf = await decryptFile(encryptedBase64, ivHex, cryptoKey);
+  return new TextDecoder().decode(buf);
 }
 
-// Encrypt object (serializes to JSON, then encrypts)
-export async function encryptObject(obj, cryptoKey) {
-  const jsonStr = JSON.stringify(obj);
-  return encryptString(jsonStr, cryptoKey);
-}
-
-// Decrypt object (decrypts, then parses JSON)
-export async function decryptObject(encryptedBase64, ivHex, cryptoKey) {
-  const jsonStr = await decryptString(encryptedBase64, ivHex, cryptoKey);
-  return JSON.parse(jsonStr);
-}
-
-// Hash password for storage (NOT for encryption - use deriveKey for that)
-export async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return bufferToHex(hashBuffer);
-}
-
-// Simple hash for PIN
-export async function hashPin(pin) {
-  return hashPassword('pin_' + pin);
-}
-
-// Compress image file before encryption
+// Compress image
 export async function compressImage(file, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     const img = new Image();
-    
     img.onload = () => {
-      const MAX_WIDTH = 2000;
+      const MAX = 2000;
       let { width, height } = img;
-      
-      if (width > MAX_WIDTH) {
-        height = (height * MAX_WIDTH) / width;
-        width = MAX_WIDTH;
-      }
-      
-      canvas.width = width;
-      canvas.height = height;
-      
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      
+      if (width > MAX) { height = height * MAX / width; width = MAX; }
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
       canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('Failed to compress image'));
-          }
-        },
-        'image/jpeg',
-        quality
+        blob => blob ? resolve(blob) : reject(new Error('Compression failed')),
+        'image/jpeg', quality
       );
     };
-    
-    img.onerror = () => reject(new Error('Failed to load image'));
+    img.onerror = () => reject(new Error('Image load failed'));
     img.src = URL.createObjectURL(file);
   });
 }

@@ -1,17 +1,12 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { Component } from 'react';
 import AppShell from './components/layout/AppShell';
-
-// New Mobile App Screens
 import SplashScreen from './pages/SplashScreen';
 import AuthScreen from './pages/AuthScreen';
 import RegisterScreen from './pages/RegisterScreen';
 import LoginScreen from './pages/LoginScreen';
-
-// Existing Screens
-import Onboarding from './pages/Onboarding';
-import SetupPassword from './pages/SetupPassword';
-import LockScreen from './pages/LockScreen';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Family from './pages/Family';
 import MemberDocs from './pages/MemberDocs';
@@ -26,98 +21,102 @@ import ActivityLog from './pages/ActivityLog';
 import Reports from './pages/Reports';
 import NotFound from './pages/NotFound';
 
+// Error Boundary — prevents full crash
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('App Error:', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight:'100vh',display:'flex',flexDirection:'column',
+                      alignItems:'center',justifyContent:'center',
+                      padding:24,textAlign:'center',background:'#fff' }}
+             className="dark:bg-slate-900">
+          <div style={{ fontSize:48,marginBottom:16 }}>⚠️</div>
+          <h2 style={{ fontSize:20,fontWeight:800,color:'#0F172A',
+                       fontFamily:"'Plus Jakarta Sans',sans-serif",marginBottom:8 }}
+              className="dark:text-white">
+            Something went wrong
+          </h2>
+          <p style={{ fontSize:14,color:'#64748B',marginBottom:24 }}
+             className="dark:text-slate-400">
+            {this.state.error?.message || 'An unexpected error occurred'}
+          </p>
+          <button onClick={() => { this.setState({ hasError:false }); window.location.href='/'; }}
+                  style={{ background:'#2563EB',color:'#fff',border:'none',
+                           borderRadius:14,padding:'12px 24px',fontSize:14,
+                           fontWeight:700,cursor:'pointer' }}>
+            Restart App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function Spinner() {
+  return (
+    <div style={{ minHeight:'100vh',display:'flex',alignItems:'center',
+                  justifyContent:'center',background:'#fff' }}
+         className="dark:bg-slate-900">
+      <div style={{ width:44,height:44,border:'4px solid #DBEAFE',
+                    borderTopColor:'#2563EB',borderRadius:'50%',
+                    animation:'spin 0.8s linear infinite' }}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }) {
   const { isUnlocked, isSetupComplete, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  if (!isSetupComplete) {
-    return <Navigate to="/register" replace />;
-  }
-
-  if (!isUnlocked) {
-    return <Navigate to="/login" replace />;
-  }
-
+  if (isLoading) return <Spinner />;
+  if (!isSetupComplete) return <Navigate to="/auth" replace />;
+  if (!isUnlocked) return <Navigate to="/login" replace />;
   return children;
 }
 
 function PublicRoute({ children }) {
   const { isUnlocked, isSetupComplete, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  if (!isSetupComplete) {
-    return children;
-  }
-
-  if (isUnlocked) {
-    return <Navigate to="/" replace />;
-  }
-
-  return <Navigate to="/login" replace />;
+  if (isLoading) return <Spinner />;
+  if (isSetupComplete && isUnlocked) return <Navigate to="/" replace />;
+  return children;
 }
 
 export default function App() {
   const { isLoading } = useAuth();
-
-  // Show loading spinner while checking auth
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-      </div>
-    );
-  }
+  if (isLoading) return <Spinner />;
 
   return (
-    <Routes>
-      {/* Mobile App Flow */}
-      <Route path="/splash" element={<SplashScreen />} />
-      <Route path="/" element={<Navigate to="/splash" replace />} />
-      
-      {/* Auth Flow */}
-      <Route path="/auth" element={<PublicRoute><AuthScreen /></PublicRoute>} />
-      <Route path="/register" element={<PublicRoute><RegisterScreen /></PublicRoute>} />
-      <Route path="/login" element={<PublicRoute><LoginScreen /></PublicRoute>} />
-      
-      {/* Legacy routes - redirect to new flow */}
-      <Route path="/onboarding" element={<Navigate to="/auth" replace />} />
-      <Route path="/setup" element={<Navigate to="/register" replace />} />
-      <Route path="/lock" element={<Navigate to="/login" replace />} />
-      
-      {/* Protected routes - require unlocked state */}
-      <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
-        <Route index element={<Dashboard />} />
-        <Route path="family" element={<Family />} />
-        <Route path="family/:memberId" element={<MemberDocs />} />
-        <Route path="upload" element={<Upload />} />
-        <Route path="upload/:memberId" element={<Upload />} />
-        <Route path="document/:docId" element={<DocumentView />} />
-        <Route path="search" element={<Search />} />
-        <Route path="categories" element={<Categories />} />
-        <Route path="categories/:category" element={<Categories />} />
-        <Route path="notifications" element={<Notifications />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="backup" element={<Backup />} />
-        <Route path="activity" element={<ActivityLog />} />
-        <Route path="reports" element={<Reports />} />
-      </Route>
-      
-      {/* 404 */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/splash"  element={<SplashScreen />} />
+        <Route path="/auth"    element={<PublicRoute><AuthScreen /></PublicRoute>} />
+        <Route path="/register" element={<PublicRoute><RegisterScreen /></PublicRoute>} />
+        <Route path="/login"   element={<PublicRoute><LoginScreen /></PublicRoute>} />
+        <Route path="/forgot"  element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+
+        <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+          <Route index element={<Dashboard />} />
+          <Route path="family" element={<Family />} />
+          <Route path="family/:memberId" element={<MemberDocs />} />
+          <Route path="upload" element={<Upload />} />
+          <Route path="upload/:memberId" element={<Upload />} />
+          <Route path="document/:docId" element={<DocumentView />} />
+          <Route path="search" element={<Search />} />
+          <Route path="categories" element={<Categories />} />
+          <Route path="categories/:category" element={<Categories />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="backup" element={<Backup />} />
+          <Route path="activity" element={<ActivityLog />} />
+          <Route path="reports" element={<Reports />} />
+        </Route>
+
+        <Route path="*" element={<NotFound />} />
+        <Route index element={<Navigate to="/splash" replace />} />
+      </Routes>
+    </ErrorBoundary>
   );
 }
