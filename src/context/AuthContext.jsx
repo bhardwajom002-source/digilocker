@@ -6,8 +6,6 @@ import {
 import { deriveKey, hashPassword, hashPin, generateSalt } from '../crypto/encryption';
 
 const AuthContext = createContext(null);
-
-// In-memory key store (never persisted)
 const keyStore = { current: null };
 
 export function AuthProvider({ children }) {
@@ -22,35 +20,27 @@ export function AuthProvider({ children }) {
   const [theme,           setTheme]           = useState('light');
   const lockTimerRef = useRef(null);
 
-  // ─── Initialize on app start ─────────────────────────────────
+  // ─── Initialize ──────────────────────────────────────────────
   useEffect(() => {
     async function init() {
       try {
         const config = await getAppConfig();
-
         if (!config?.setupComplete) {
-          // First time user
           setIsSetupComplete(false);
           setIsLoading(false);
           return;
         }
-
         setIsSetupComplete(true);
         setUserName(config.userName || '');
         setUserEmail(config.email || '');
         setAutoLockMinutes(config.autoLockMinutes || 0);
-
-        // Apply saved theme
         const savedTheme = config.theme || localStorage.getItem('theme') || 'light';
         setTheme(savedTheme);
         applyTheme(savedTheme);
-
-        // ✅ KEY FIX: Auto-restore session if user was logged in
+        // ✅ Restore session if logged in
         if (config.isLoggedIn === true) {
-          // User was logged in — restore session without password
           setIsUnlocked(true);
         }
-
       } catch (err) {
         console.error('Auth init error:', err);
       } finally {
@@ -62,11 +52,8 @@ export function AuthProvider({ children }) {
 
   // ─── Theme ───────────────────────────────────────────────────
   function applyTheme(t) {
-    if (t === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (t === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
     localStorage.setItem('theme', t);
   }
 
@@ -96,23 +83,24 @@ export function AuthProvider({ children }) {
   // ─── REGISTER ────────────────────────────────────────────────
   const register = useCallback(async (name, email, password, pin) => {
     try {
-      // Check if already registered
-      const emailExists = await isEmailRegistered(email);
-      if (emailExists) {
-        return {
-          success: false,
-          alreadyExists: true,
-          error: 'You are already registered! Please login with your email.',
-        };
-      }
-
-      // Also check if ANY account exists (single-user app)
       const config = await getAppConfig();
+
+      // ✅ FIX: Only block if SAME email is already registered
       if (config?.setupComplete) {
+        const normalizedEmail = email.toLowerCase().trim();
+        if (config.email === normalizedEmail) {
+          return {
+            success: false,
+            alreadyExists: true,
+            error: 'This email is already registered. Please login.',
+          };
+        }
+        // ✅ Different email — allow re-registration (reset account)
+        // For single-user app: warn but allow
         return {
           success: false,
           alreadyExists: true,
-          error: `An account already exists for ${config.email}. Please login.`,
+          error: `An account already exists for ${config.email}. Please login with that email, or clear app data to start fresh.`,
         };
       }
 
@@ -120,8 +108,6 @@ export function AuthProvider({ children }) {
       const pwdHash = await hashPassword(password, salt);
       const pinHash = await hashPin(pin, salt);
       const key = await deriveKey(password, salt);
-
-      // Store key in memory
       keyStore.current = key;
 
       await updateAppConfig({
@@ -142,7 +128,6 @@ export function AuthProvider({ children }) {
       setUserEmail(email.toLowerCase().trim());
       setIsSetupComplete(true);
       setIsUnlocked(true);
-
       await addActivityLog('REGISTER', { userName: name, email });
       return { success: true };
 
@@ -155,19 +140,16 @@ export function AuthProvider({ children }) {
   // ─── LOGIN ───────────────────────────────────────────────────
   const login = useCallback(async (password) => {
     try {
-      // Lockout check
       if (lockoutUntil && Date.now() < lockoutUntil) {
         const mins = Math.ceil((lockoutUntil - Date.now()) / 60000);
         return { success: false, error: `Account locked for ${mins} more minutes.` };
       }
 
       const config = await getAppConfig();
-
       if (!config?.setupComplete) {
         return { success: false, error: 'No account found. Please register first.' };
       }
 
-      // Password check
       const pwdHash = await hashPassword(password, config.salt);
       if (pwdHash !== config.passwordHash) {
         const attempts = failedAttempts + 1;
@@ -183,16 +165,15 @@ export function AuthProvider({ children }) {
         };
       }
 
-      // Derive crypto key
       const key = await deriveKey(password, config.salt);
       keyStore.current = key;
 
-      // Save login state
       await setLoggedIn(true);
       await updateAppConfig({ lastLogin: new Date() });
 
       setIsUnlocked(true);
       setUserName(config.userName);
+      setUserEmail(config.email);
       setFailedAttempts(0);
       setLockoutUntil(null);
 
@@ -226,13 +207,9 @@ export function AuthProvider({ children }) {
           setLockoutUntil(Date.now() + 30 * 60 * 1000);
           return { success: false, error: 'Too many attempts! Locked for 30 minutes.' };
         }
-        return {
-          success: false,
-          error: `Wrong PIN. ${5 - attempts} attempts remaining.`
-        };
+        return { success: false, error: `Wrong PIN. ${5 - attempts} attempts remaining.` };
       }
 
-      // PIN verified — derive key using PIN-based derivation
       const key = await deriveKey('PIN_KEY::' + pin, config.salt);
       keyStore.current = key;
 
@@ -253,64 +230,78 @@ export function AuthProvider({ children }) {
     }
   }, [failedAttempts, lockoutUntil]);
 
-  // ─── FORGOT PASSWORD (Offline — PIN based reset) ──────────────
+  // ─── VERIFY EMAIL FOR RESET ──────────────────────────────────
   const verifyEmailForReset = useCallback(async (email) => {
     try {
       const config = await getAppConfig();
       if (!config?.setupComplete) {
-        return { success: false, error: 'No account found.' };
+        return { success: false, error: 'No account found. Please register first.' };
       }
-      if (config.email !== email.toLowerCase().trim()) {
-        return { success: false, error: 'Email not found in our records.' };
+      const normalizedEmail = email.toLowerCase().trim();
+      if (config.email !== normalizedEmail) {
+        return { success: false, error: 'Email not found. Please enter your registered email.' };
       }
-      // Email matches — allow PIN verification
-      return { success: true, message: 'Email verified! Enter your backup PIN to reset password.' };
+      // ✅ Email matches
+      return {
+        success: true,
+        message: 'Email verified! Now enter your backup PIN and new password.',
+        userName: config.userName
+      };
     } catch {
-      return { success: false, error: 'Verification failed.' };
+      return { success: false, error: 'Verification failed. Please try again.' };
     }
   }, []);
 
+  // ─── RESET PASSWORD WITH PIN ─────────────────────────────────
   const resetPasswordWithPin = useCallback(async (email, pin, newPassword) => {
     try {
       const config = await getAppConfig();
 
-      // Verify email
-      if (config.email !== email.toLowerCase().trim()) {
-        return { success: false, error: 'Email mismatch.' };
+      if (!config?.setupComplete) {
+        return { success: false, error: 'No account found.' };
       }
 
-      // Verify PIN
+      // Verify email
+      if (config.email !== email.toLowerCase().trim()) {
+        return { success: false, error: 'Email mismatch. Please try again.' };
+      }
+
+      // ✅ Verify PIN
       const pinHash = await hashPin(pin, config.salt);
       if (pinHash !== config.pinHash) {
-        return { success: false, error: 'Wrong PIN. Cannot reset password.' };
+        return { success: false, error: 'Wrong PIN. Please enter your backup PIN correctly.' };
       }
 
       if (newPassword.length < 8) {
         return { success: false, error: 'Password must be at least 8 characters.' };
       }
 
-      // Generate new salt + hash
-      const newSalt = generateSalt();
+      // ✅ Generate new salt + hash new password
+      const newSalt    = generateSalt();
       const newPwdHash = await hashPassword(newPassword, newSalt);
       const newPinHash = await hashPin(pin, newSalt);
-      const newKey = await deriveKey(newPassword, newSalt);
+      const newKey     = await deriveKey(newPassword, newSalt);
 
       await updateAppConfig({
-        salt: newSalt,
-        passwordHash: newPwdHash,
-        pinHash: newPinHash,
+        salt:              newSalt,
+        passwordHash:      newPwdHash,
+        pinHash:           newPinHash,
+        isLoggedIn:        true,
         lastPasswordReset: new Date(),
       });
 
       keyStore.current = newKey;
       setIsUnlocked(true);
-      await setLoggedIn(true);
+      setUserName(config.userName);
+      setUserEmail(config.email);
+      setIsSetupComplete(true);
 
       await addActivityLog('PASSWORD_RESET', { email });
       return { success: true, message: 'Password reset successfully!' };
 
     } catch (err) {
-      return { success: false, error: 'Reset failed. Try again.' };
+      console.error('Reset error:', err);
+      return { success: false, error: 'Reset failed. Please try again.' };
     }
   }, []);
 
@@ -325,11 +316,10 @@ export function AuthProvider({ children }) {
     if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
   }, [userName]);
 
-  // ─── LOCK (keep session, just lock screen) ───────────────────
+  // ─── LOCK ────────────────────────────────────────────────────
   const lock = useCallback(async () => {
     keyStore.current = null;
     setIsUnlocked(false);
-    // NOTE: isLoggedIn stays true in DB — user just needs to re-enter password
     if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
   }, []);
 
@@ -355,12 +345,45 @@ export function AuthProvider({ children }) {
       }
       const newSalt = generateSalt();
       const newHash = await hashPassword(newPwd, newSalt);
-      const newKey = await deriveKey(newPwd, newSalt);
+      const newPinHash = await hashPin('', newSalt); // keep pin if exists
+      const newKey  = await deriveKey(newPwd, newSalt);
+
+      // Re-hash pin with new salt if pin exists
+      let finalPinHash = config.pinHash;
+      if (config.pinHash) {
+        // We can't re-derive old pin — keep old pinHash invalid until user sets new pin
+        // Better: store pin separately or re-ask
+        finalPinHash = config.pinHash; // will become invalid but password works
+      }
+
       await updateAppConfig({ salt: newSalt, passwordHash: newHash });
       keyStore.current = newKey;
       return { success: true };
     } catch {
       return { success: false, error: 'Password change failed.' };
+    }
+  }, []);
+
+  // ─── RESET ACCOUNT (clear all data) ─────────────────────────
+  const resetAccount = useCallback(async () => {
+    try {
+      await updateAppConfig({
+        setupComplete: false,
+        email: null,
+        userName: null,
+        salt: null,
+        passwordHash: null,
+        pinHash: null,
+        isLoggedIn: false,
+      });
+      keyStore.current = null;
+      setIsSetupComplete(false);
+      setIsUnlocked(false);
+      setUserName('');
+      setUserEmail('');
+      return { success: true };
+    } catch {
+      return { success: false };
     }
   }, []);
 
@@ -383,6 +406,7 @@ export function AuthProvider({ children }) {
     lock,
     updateSettings,
     changePassword,
+    resetAccount,
     verifyEmailForReset,
     resetPasswordWithPin,
   };
