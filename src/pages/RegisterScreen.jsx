@@ -22,7 +22,7 @@ function getStrength(p) {
 
 export default function RegisterScreen() {
   const navigate = useNavigate();
-  const { setup } = useAuth();
+  const { register } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', pin: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,7 +41,7 @@ export default function RegisterScreen() {
     if (form.pin.length < 4 || form.pin.length > 6) return setError('PIN must be 4-6 digits');
 
     setLoading(true);
-    const result = await setup(form.password, form.pin, form.name, form.email);
+    const result = await register(form.password, form.pin, form.name, form.email);
     setLoading(false);
 
     if (result.success) {
