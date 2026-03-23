@@ -41,7 +41,7 @@ export default function RegisterScreen() {
     if (form.pin.length < 4 || form.pin.length > 6) return setError('PIN must be 4-6 digits');
 
     setLoading(true);
-    const result = await register(form.password, form.pin, form.name, form.email);
+    const result = await register(form.name, form.email, form.password, form.pin);
     setLoading(false);
 
     if (result.success) {
