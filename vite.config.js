@@ -11,43 +11,54 @@ export default defineConfig({
       manifest: {
         name: 'DigiLocker by OM',
         short_name: 'DigiLocker',
-        description: 'Your personal digital document locker',
-        theme_color: '#1a73e8',
-        background_color: '#1a73e8',
+        description: 'Your private family document vault',
+        theme_color: '#2563EB',
+        background_color: '#2563EB',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
         start_url: '/',
+        id: 'digilocker-by-om',
         icons: [
           {
             src: '/icons/icon-72.png',
             sizes: '72x72',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
             src: '/icons/icon-96.png',
             sizes: '96x96',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
             src: '/icons/icon-128.png',
             sizes: '128x128',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
             src: '/icons/icon-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
             src: '/icons/icon-512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api/],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,json,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
