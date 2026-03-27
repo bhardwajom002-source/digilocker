@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  getAppConfig, updateAppConfig, isEmailRegistered,
+  getAppConfig, updateAppConfig,
   isUserLoggedIn, setLoggedIn, addActivityLog
 } from '../db';
 import { deriveKey, hashPassword, hashPin, generateSalt } from '../crypto/encryption';
@@ -37,7 +37,6 @@ export function AuthProvider({ children }) {
         const savedTheme = config.theme || localStorage.getItem('theme') || 'light';
         setTheme(savedTheme);
         applyTheme(savedTheme);
-        // ✅ Restore session if logged in
         if (config.isLoggedIn === true) {
           setIsUnlocked(true);
         }
@@ -71,7 +70,7 @@ export function AuthProvider({ children }) {
       if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
       lockTimerRef.current = setTimeout(() => lock(), autoLockMinutes * 60 * 1000);
     };
-    const events = ['mousedown','keydown','touchstart','scroll'];
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
     events.forEach(e => document.addEventListener(e, reset));
     reset();
     return () => {
@@ -81,54 +80,57 @@ export function AuthProvider({ children }) {
   }, [isUnlocked, autoLockMinutes]);
 
   // ─── REGISTER ────────────────────────────────────────────────
+  // BUG FIX #1:
+  // Pehle: setupComplete hote hi SABKO block karta tha — same email ho ya alag.
+  // Ab: Same email → "already registered, please login" show karo.
+  //     Different email → New account banao (single-user app reset).
+  //     No account yet → Fresh registration.
   const register = useCallback(async (name, email, password, pin) => {
     try {
       const config = await getAppConfig();
+      const normalizedEmail = email.toLowerCase().trim();
 
-      // ✅ FIX: Only block if SAME email is already registered
       if (config?.setupComplete) {
-        const normalizedEmail = email.toLowerCase().trim();
+        // ── Same email registered hai ──
         if (config.email === normalizedEmail) {
           return {
             success: false,
             alreadyExists: true,
-            error: 'This email is already registered. Please login.',
+            sameEmail: true,
+            error: 'This email is already registered. Please login instead.',
           };
         }
-        // ✅ Different email — allow re-registration (reset account)
-        // For single-user app: warn but allow
-        return {
-          success: false,
-          alreadyExists: true,
-          error: `An account already exists for ${config.email}. Please login with that email, or clear app data to start fresh.`,
-        };
+        // ── Alag email — single-user app mein reset karke naya account banao ──
+        // (Agar multi-user chahiye toh yahan different logic lagega)
+        // Abhi: allow karo, purana account overwrite ho jayega
       }
 
-      const salt = generateSalt();
+      // ── Fresh registration (ya different-email reset) ──
+      const salt    = generateSalt();
       const pwdHash = await hashPassword(password, salt);
       const pinHash = await hashPin(pin, salt);
-      const key = await deriveKey(password, salt);
+      const key     = await deriveKey(password, salt);
       keyStore.current = key;
 
       await updateAppConfig({
-        setupComplete: true,
-        email: email.toLowerCase().trim(),
-        userName: name.trim(),
+        setupComplete:  true,
+        email:          normalizedEmail,
+        userName:       name.trim(),
         salt,
-        passwordHash: pwdHash,
+        passwordHash:   pwdHash,
         pinHash,
-        isLoggedIn: true,
+        isLoggedIn:     true,
         autoLockMinutes: 0,
-        theme: 'light',
-        createdAt: new Date(),
-        lastLogin: new Date(),
+        theme:          'light',
+        createdAt:      new Date(),
+        lastLogin:      new Date(),
       });
 
       setUserName(name.trim());
-      setUserEmail(email.toLowerCase().trim());
+      setUserEmail(normalizedEmail);
       setIsSetupComplete(true);
       setIsUnlocked(true);
-      await addActivityLog('REGISTER', { userName: name, email });
+      await addActivityLog('REGISTER', { userName: name, email: normalizedEmail });
       return { success: true };
 
     } catch (err) {
@@ -138,7 +140,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ─── LOGIN ───────────────────────────────────────────────────
-  const login = useCallback(async (password) => {
+  // BUG FIX #2:
+  // Pehle: login(password) — sirf password leta tha, email verify nahi hota tha.
+  //        LoginScreen login(email, password) bhej raha tha — dusra argument
+  //        ignore ho jaata tha, aur password match kabhi nahi hota tha.
+  // Ab:   login(email, password) — pehle email match check, phir password hash check.
+  const login = useCallback(async (email, password) => {
     try {
       if (lockoutUntil && Date.now() < lockoutUntil) {
         const mins = Math.ceil((lockoutUntil - Date.now()) / 60000);
@@ -150,6 +157,16 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'No account found. Please register first.' };
       }
 
+      // ── Email verify karo ──
+      const normalizedEmail = email.toLowerCase().trim();
+      if (config.email !== normalizedEmail) {
+        return {
+          success: false,
+          error: 'Email not registered. Please check your email or register.',
+        };
+      }
+
+      // ── Password verify karo ──
       const pwdHash = await hashPassword(password, config.salt);
       if (pwdHash !== config.passwordHash) {
         const attempts = failedAttempts + 1;
@@ -161,7 +178,7 @@ export function AuthProvider({ children }) {
         }
         return {
           success: false,
-          error: `Wrong password. ${5 - attempts} attempts remaining.`
+          error: `Wrong password. ${5 - attempts} attempt${5 - attempts === 1 ? '' : 's'} remaining.`,
         };
       }
 
@@ -237,15 +254,13 @@ export function AuthProvider({ children }) {
       if (!config?.setupComplete) {
         return { success: false, error: 'No account found. Please register first.' };
       }
-      const normalizedEmail = email.toLowerCase().trim();
-      if (config.email !== normalizedEmail) {
+      if (config.email !== email.toLowerCase().trim()) {
         return { success: false, error: 'Email not found. Please enter your registered email.' };
       }
-      // ✅ Email matches
       return {
         success: true,
         message: 'Email verified! Now enter your backup PIN and new password.',
-        userName: config.userName
+        userName: config.userName,
       };
     } catch {
       return { success: false, error: 'Verification failed. Please try again.' };
@@ -256,27 +271,20 @@ export function AuthProvider({ children }) {
   const resetPasswordWithPin = useCallback(async (email, pin, newPassword) => {
     try {
       const config = await getAppConfig();
-
       if (!config?.setupComplete) {
         return { success: false, error: 'No account found.' };
       }
-
-      // Verify email
       if (config.email !== email.toLowerCase().trim()) {
         return { success: false, error: 'Email mismatch. Please try again.' };
       }
-
-      // ✅ Verify PIN
       const pinHash = await hashPin(pin, config.salt);
       if (pinHash !== config.pinHash) {
         return { success: false, error: 'Wrong PIN. Please enter your backup PIN correctly.' };
       }
-
       if (newPassword.length < 8) {
         return { success: false, error: 'Password must be at least 8 characters.' };
       }
 
-      // ✅ Generate new salt + hash new password
       const newSalt    = generateSalt();
       const newPwdHash = await hashPassword(newPassword, newSalt);
       const newPinHash = await hashPin(pin, newSalt);
@@ -305,7 +313,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // ─── LOGOUT ───────────────────────────────────────────────────
+  // ─── LOGOUT ──────────────────────────────────────────────────
   const logout = useCallback(async () => {
     try {
       keyStore.current = null;
@@ -343,18 +351,12 @@ export function AuthProvider({ children }) {
       if (hash !== config.passwordHash) {
         return { success: false, error: 'Current password is incorrect.' };
       }
-      const newSalt = generateSalt();
-      const newHash = await hashPassword(newPwd, newSalt);
-      const newPinHash = await hashPin('', newSalt); // keep pin if exists
-      const newKey  = await deriveKey(newPwd, newSalt);
-
-      // Re-hash pin with new salt if pin exists
-      let finalPinHash = config.pinHash;
-      if (config.pinHash) {
-        // We can't re-derive old pin — keep old pinHash invalid until user sets new pin
-        // Better: store pin separately or re-ask
-        finalPinHash = config.pinHash; // will become invalid but password works
-      }
+      const newSalt    = generateSalt();
+      const newHash    = await hashPassword(newPwd, newSalt);
+      const newPinHash = config.pinHash
+        ? await hashPin('', newSalt)
+        : null;
+      const newKey = await deriveKey(newPwd, newSalt);
 
       await updateAppConfig({ salt: newSalt, passwordHash: newHash });
       keyStore.current = newKey;
@@ -364,17 +366,17 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // ─── RESET ACCOUNT (clear all data) ─────────────────────────
+  // ─── RESET ACCOUNT ───────────────────────────────────────────
   const resetAccount = useCallback(async () => {
     try {
       await updateAppConfig({
         setupComplete: false,
-        email: null,
-        userName: null,
-        salt: null,
-        passwordHash: null,
-        pinHash: null,
-        isLoggedIn: false,
+        email:         null,
+        userName:      null,
+        salt:          null,
+        passwordHash:  null,
+        pinHash:       null,
+        isLoggedIn:    false,
       });
       keyStore.current = null;
       setIsSetupComplete(false);
@@ -419,7 +421,7 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 }
