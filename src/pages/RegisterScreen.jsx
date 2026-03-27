@@ -51,8 +51,11 @@ export default function RegisterScreen() {
     setLoading(false);
 
     if (result.success) {
-      toast.success('Vault created successfully! 🎉');
-      navigate('/', { replace: true });
+      // Success screen pe jao — wahan se login redirect hoga
+      navigate('/register-success', {
+        replace: true,
+        state: { userName: result.userName || form.name.trim() },
+      });
       return;
     }
 
