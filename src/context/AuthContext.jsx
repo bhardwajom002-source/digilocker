@@ -113,25 +113,28 @@ export function AuthProvider({ children }) {
       keyStore.current = key;
 
       await updateAppConfig({
-        setupComplete:  true,
-        email:          normalizedEmail,
-        userName:       name.trim(),
+        setupComplete:   true,
+        email:           normalizedEmail,
+        userName:        name.trim(),
         salt,
-        passwordHash:   pwdHash,
+        passwordHash:    pwdHash,
         pinHash,
-        isLoggedIn:     true,
+        isLoggedIn:      false,   // ← register ke baad login nahi — user ko login karna hoga
         autoLockMinutes: 0,
-        theme:          'light',
-        createdAt:      new Date(),
-        lastLogin:      new Date(),
+        theme:           'light',
+        createdAt:       new Date(),
+        lastLogin:       null,
       });
 
+      // State: setup complete hai but UNLOCKED nahi — login screen dekhega
       setUserName(name.trim());
       setUserEmail(normalizedEmail);
       setIsSetupComplete(true);
-      setIsUnlocked(true);
+      setIsUnlocked(false);       // ← unlocked mat karo
+      keyStore.current = null;    // ← key bhi clear karo
+
       await addActivityLog('REGISTER', { userName: name, email: normalizedEmail });
-      return { success: true };
+      return { success: true, userName: name.trim() };
 
     } catch (err) {
       console.error('Register error:', err);
