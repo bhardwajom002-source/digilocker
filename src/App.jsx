@@ -7,6 +7,7 @@ import AuthScreen      from './pages/AuthScreen';
 import RegisterScreen  from './pages/RegisterScreen';
 import LoginScreen     from './pages/LoginScreen';
 import ForgotPassword  from './pages/ForgotPassword';
+import RegisterSuccess  from './pages/RegisterSuccess';
 import Dashboard       from './pages/Dashboard';
 import Family          from './pages/Family';
 import MemberDocs      from './pages/MemberDocs';
@@ -115,7 +116,16 @@ export default function App() {
                  chahe logged in ho ya na ho. Yahi sahi behaviour hai
                  kyunki password reset ke liye login hona zaruri nahi.
         */}
-        <Route path="/forgot"   element={<ForgotPassword />} />
+        <Route path="/forgot"            element={<ForgotPassword />} />
+
+        {/*
+          Registration success screen — open route
+          Register hone ke baad yahan aata hai user,
+          3 seconds baad /login pe auto-redirect hota hai.
+          PublicRoute se bahar rakha — warna isSetupComplete=true
+          hone par seedha "/" redirect ho jaata.
+        */}
+        <Route path="/register-success"  element={<RegisterSuccess />} />
 
         {/* Protected routes — unlock hone par hi access */}
         <Route path="/" element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
