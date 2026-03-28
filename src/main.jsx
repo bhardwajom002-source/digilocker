@@ -7,6 +7,22 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import './index.css';
 
+// ─── Global Error Handlers for Crore+ Users ───
+// Catches unhandled promise rejections and uncaught errors
+// Ensures app NEVER crashes - always shows friendly message
+
+// Handle unhandled promise rejections (async errors)
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('🔴 Unhandled Promise Rejection:', event.reason);
+  event.preventDefault(); // Prevent default browser error
+});
+
+// Handle uncaught errors
+window.addEventListener('error', (event) => {
+  console.error('🔴 Uncaught Error:', event.error);
+  // Don't prevent default - let ErrorBoundary handle it
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

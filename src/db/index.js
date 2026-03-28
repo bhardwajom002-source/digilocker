@@ -12,6 +12,19 @@ db.version(1).stores({
   backups:       '++id, date, type',
 });
 
+// ─── Safe Database Wrapper ───────────────────────────────────────
+// Prevents crashes when IndexedDB is corrupted or full
+// Returns safe defaults instead of throwing errors
+
+const safeAsync = async (fn, fallback) => {
+  try {
+    return await fn();
+  } catch (error) {
+    console.error('🔴 DB Error:', error.message);
+    return fallback;
+  }
+};
+
 // ─── App Config ───────────────────────────────────────────────
 export async function getAppConfig() {
   try {
