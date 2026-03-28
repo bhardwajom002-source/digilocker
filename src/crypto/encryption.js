@@ -43,10 +43,10 @@ export async function deriveKey(password, salt) {
   );
 }
 
-// Hash password with salt for storage
+// Hash password with salt for storage - CONSISTENT for register & login
 export async function hashPassword(password, salt) {
   const enc = new TextEncoder();
-  const data = enc.encode(password + '::' + salt);
+  const data = enc.encode(password + '::DIGILOCKER::' + salt);
   const hash = await crypto.subtle.digest('SHA-256', data);
   return bufferToHex(hash);
 }
@@ -54,7 +54,7 @@ export async function hashPassword(password, salt) {
 // Hash PIN with salt
 export async function hashPin(pin, salt) {
   const enc = new TextEncoder();
-  const data = enc.encode('PIN::' + pin + '::' + salt);
+  const data = enc.encode('PIN::DIGILOCKER::' + pin + '::' + salt);
   const hash = await crypto.subtle.digest('SHA-256', data);
   return bufferToHex(hash);
 }

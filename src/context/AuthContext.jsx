@@ -143,11 +143,6 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ─── LOGIN ───────────────────────────────────────────────────
-  // BUG FIX #2:
-  // Pehle: login(password) — sirf password leta tha, email verify nahi hota tha.
-  //        LoginScreen login(email, password) bhej raha tha — dusra argument
-  //        ignore ho jaata tha, aur password match kabhi nahi hota tha.
-  // Ab:   login(email, password) — pehle email match check, phir password hash check.
   const login = useCallback(async (email, password) => {
     try {
       if (lockoutUntil && Date.now() < lockoutUntil) {
@@ -160,16 +155,13 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'No account found. Please register first.' };
       }
 
-      // ── Email verify karo ──
+      // Verify email
       const normalizedEmail = email.toLowerCase().trim();
-      if (config.email !== normalizedEmail) {
-        return {
-          success: false,
-          error: 'Email not registered. Please check your email or register.',
-        };
+      if (config.email.toLowerCase() !== normalizedEmail) {
+        return { success: false, error: 'Email not found.' };
       }
 
-      // ── Password verify karo ──
+      // Password check - uses SAME hash function as register
       const pwdHash = await hashPassword(password, config.salt);
       if (pwdHash !== config.passwordHash) {
         const attempts = failedAttempts + 1;

@@ -155,7 +155,6 @@ export default function App() {
 
         {/* Root redirect → splash */}
         <Route path="*" element={<NotFound />} />
-
       </Routes>
     </ErrorBoundary>
   );
