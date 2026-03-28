@@ -14,7 +14,7 @@ const AUTO_LOCK_OPTIONS = [0, 5, 10, 15, 30];
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { userName, userEmail, updateSettings, lock, logout, autoLockMinutes } = useAuth();
+  const { userName, userEmail, updateSettings, lock, logout, autoLockMinutes, changePin } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   const [config, setConfig] = useState(null);
@@ -51,13 +51,20 @@ export default function Settings() {
     }
   };
 
-  const handleChangePIN = () => {
+  const handleChangePIN = async () => {
+    const currentPin = window.prompt('Enter current PIN:');
+    if (!currentPin) return;
     const newPin = window.prompt('Enter new PIN (4-6 digits):');
     if (!newPin) return;
-    if (newPin.length >= 4 && newPin.length <= 6 && /^\d+$/.test(newPin)) {
-      toast.success('PIN updated ✓');
-    } else {
+    if (newPin.length < 4 || newPin.length > 6 || !/^\d+$/.test(newPin)) {
       toast.error('PIN must be 4-6 digits only');
+      return;
+    }
+    const result = await changePin(currentPin, newPin);
+    if (result.success) {
+      toast.success('PIN updated successfully ✓');
+    } else {
+      toast.error(result.error || 'Failed to update PIN');
     }
   };
 

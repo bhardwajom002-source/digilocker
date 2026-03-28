@@ -338,6 +338,28 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // ─── CHANGE PIN ────────────────────────────────────────────
+  const changePin = useCallback(async (currentPin, newPin) => {
+    try {
+      const config = await getAppConfig();
+      if (!config?.setupComplete) {
+        return { success: false, error: 'No account found.' };
+      }
+      // Verify current PIN
+      const currentPinHash = await hashPin(currentPin, config.salt);
+      if (currentPinHash !== config.pinHash) {
+        return { success: false, error: 'Current PIN is incorrect.' };
+      }
+      // Hash new PIN with current salt
+      const newPinHash = await hashPin(newPin, config.salt);
+      await updateAppConfig({ pinHash: newPinHash });
+      await addActivityLog('PIN_CHANGE', {});
+      return { success: true };
+    } catch {
+      return { success: false, error: 'PIN change failed.' };
+    }
+  }, []);
+
   // ─── CHANGE PASSWORD ─────────────────────────────────────────
   const changePassword = useCallback(async (currentPwd, newPwd) => {
     try {
@@ -346,11 +368,8 @@ export function AuthProvider({ children }) {
       if (hash !== config.passwordHash) {
         return { success: false, error: 'Current password is incorrect.' };
       }
-      const newSalt    = generateSalt();
-      const newHash    = await hashPassword(newPwd, newSalt);
-      const newPinHash = config.pinHash
-        ? await hashPin('', newSalt)
-        : null;
+      const newSalt = generateSalt();
+      const newHash = await hashPassword(newPwd, newSalt);
       const newKey = await deriveKey(newPwd, newSalt);
 
       await updateAppConfig({ salt: newSalt, passwordHash: newHash });
@@ -403,6 +422,7 @@ export function AuthProvider({ children }) {
     lock,
     updateSettings,
     changePassword,
+    changePin,
     resetAccount,
     verifyEmailForReset,
     resetPasswordWithPin,
