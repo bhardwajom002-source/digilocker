@@ -4,6 +4,7 @@ import {
   isUserLoggedIn, setLoggedIn, addActivityLog
 } from '../db';
 import { deriveKey, hashPassword, hashPin, generateSalt } from '../crypto/encryption';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const AuthContext = createContext(null);
 const keyStore = { current: null };
@@ -125,6 +126,32 @@ export function AuthProvider({ children }) {
         createdAt:       new Date(),
         lastLogin:       null,
       });
+
+      // ── Save user to Supabase ──
+      if (isSupabaseConfigured) {
+        try {
+          const { error: supabaseError } = await supabase
+            .from('users')
+            .upsert([
+              {
+                id: normalizedEmail,
+                email: normalizedEmail,
+                name: name.trim(),
+                password_hash: pwdHash,
+                salt: salt,
+                created_at: new Date().toISOString(),
+              }
+            ], { onConflict: 'id' });
+          
+          if (supabaseError) {
+            console.error('Supabase sync error:', supabaseError);
+          } else {
+            console.log('✅ User synced to Supabase');
+          }
+        } catch (supabaseErr) {
+          console.error('Supabase sync error:', supabaseErr);
+        }
+      }
 
       // State: setup complete hai but UNLOCKED nahi — login screen dekhega
       setUserName(name.trim());
