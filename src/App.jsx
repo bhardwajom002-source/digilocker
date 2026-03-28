@@ -7,7 +7,6 @@ import AuthScreen      from './pages/AuthScreen';
 import RegisterScreen  from './pages/RegisterScreen';
 import LoginScreen     from './pages/LoginScreen';
 import ForgotPassword  from './pages/ForgotPassword';
-import RegisterSuccess from './pages/RegisterSuccess';
 import Dashboard       from './pages/Dashboard';
 import Family          from './pages/Family';
 import MemberDocs      from './pages/MemberDocs';
@@ -42,12 +41,27 @@ class ErrorBoundary extends Component {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          padding: 24,
+          textAlign: 'center',
+          background: '#fff',
+          fontFamily: 'Inter, sans-serif',
         }}>
-          <h2>Something went wrong</h2>
-          <p>{this.state.error?.message}</p>
-          <button onClick={() => window.location.reload()}>
-            Restart
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+          <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0F172A', marginBottom: 8 }}>
+            Something went wrong
+          </h2>
+          <p style={{ fontSize: 14, color: '#64748B', marginBottom: 24 }}>
+            {this.state.error?.message || 'Unexpected error occurred'}
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); window.location.href = '/'; }}
+            style={{
+              background: '#2563EB', color: '#fff', border: 'none',
+              borderRadius: 14, padding: '12px 24px',
+              fontSize: 14, fontWeight: 700, cursor: 'pointer',
+            }}>
+            Restart App
           </button>
         </div>
       );
@@ -56,82 +70,91 @@ class ErrorBoundary extends Component {
   }
 }
 
-// ─── SIMPLE LOADING (NO BLOCKING) ────────────────────────────
-function Loading() {
-  return <div style={{ padding: 20 }}>Loading...</div>;
+// ─── Spinner ─────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: '#fff',
+    }}>
+      <div style={{
+        width: 44, height: 44,
+        border: '4px solid #DBEAFE',
+        borderTopColor: '#2563EB',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite',
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
 }
 
-// ─── Protected Route ─────────────────────────────────────────
+// ─── Protected Route — must be logged in ─────────────────────
 function ProtectedRoute({ children }) {
   const { isUnlocked, isSetupComplete, isLoading } = useAuth();
-
-  // ❌ Spinner removed (bot block hota tha)
-  if (isLoading) return <Loading />;
-
+  if (isLoading) return <Spinner />;
   if (!isSetupComplete) return <Navigate to="/auth" replace />;
   if (!isUnlocked) return <Navigate to="/login" replace />;
-
   return children;
 }
 
-// ─── Public Route ────────────────────────────────────────────
+// ─── Public Route — only for guests ─────────────────────────
 function PublicRoute({ children }) {
   const { isUnlocked, isSetupComplete, isLoading } = useAuth();
-
-  // ❌ Spinner removed
-  if (isLoading) return children;
-
-  if (isSetupComplete && isUnlocked) {
-    return <Navigate to="/" replace />;
-  }
-
+  if (isLoading) return <Spinner />;
+  // Already logged in → dashboard pe bhejo
+  if (isSetupComplete && isUnlocked) return <Navigate to="/" replace />;
   return children;
 }
 
 // ─── App ─────────────────────────────────────────────────────
 export default function App() {
   const { isLoading } = useAuth();
-
-  // ❌ Infinite spinner removed
-  if (isLoading) return <Loading />;
+  if (isLoading) return <Spinner />;
 
   return (
     <ErrorBoundary>
       <Routes>
 
-        {/* Splash */}
+        {/* Splash — always accessible */}
         <Route path="/splash" element={<SplashScreen />} />
 
-        {/* Public */}
-        <Route path="/auth" element={<PublicRoute><AuthScreen /></PublicRoute>} />
+        {/* Public routes — sirf non-logged in users ke liye */}
+        <Route path="/auth"     element={<PublicRoute><AuthScreen /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterScreen /></PublicRoute>} />
-        <Route path="/login" element={<PublicRoute><LoginScreen /></PublicRoute>} />
+        <Route path="/login"    element={<PublicRoute><LoginScreen /></PublicRoute>} />
+        <Route path="/forgot"   element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
-        {/* Open */}
-        <Route path="/forgot" element={<ForgotPassword />} />
-        <Route path="/register-success" element={<RegisterSuccess />} />
-
-        {/* 🔥 ROOT FIX — PUBLIC ACCESS */}
-        <Route path="/" element={<AppShell />}>
+        {/* Protected routes — sirf logged in users ke liye */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
-          <Route path="family" element={<ProtectedRoute><Family /></ProtectedRoute>} />
-          <Route path="family/:memberId" element={<ProtectedRoute><MemberDocs /></ProtectedRoute>} />
-          <Route path="upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
-          <Route path="upload/:memberId" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
-          <Route path="document/:docId" element={<ProtectedRoute><DocumentView /></ProtectedRoute>} />
-          <Route path="search" element={<ProtectedRoute><Search /></ProtectedRoute>} />
-          <Route path="categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
-          <Route path="categories/:category" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
-          <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-          <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="backup" element={<ProtectedRoute><Backup /></ProtectedRoute>} />
-          <Route path="activity" element={<ProtectedRoute><ActivityLog /></ProtectedRoute>} />
-          <Route path="reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+          <Route path="family"                element={<Family />} />
+          <Route path="family/:memberId"      element={<MemberDocs />} />
+          <Route path="upload"                element={<Upload />} />
+          <Route path="upload/:memberId"      element={<Upload />} />
+          <Route path="document/:docId"       element={<DocumentView />} />
+          <Route path="search"                element={<Search />} />
+          <Route path="categories"            element={<Categories />} />
+          <Route path="categories/:category"  element={<Categories />} />
+          <Route path="notifications"         element={<Notifications />} />
+          <Route path="settings"              element={<Settings />} />
+          <Route path="backup"                element={<Backup />} />
+          <Route path="activity"              element={<ActivityLog />} />
+          <Route path="reports"               element={<Reports />} />
         </Route>
 
-        {/* Fallback */}
+        {/* Root redirect → splash */}
         <Route path="*" element={<NotFound />} />
-        <Route index element={<Navigate to="/splash" replace />} />
 
       </Routes>
     </ErrorBoundary>
