@@ -51,18 +51,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   // ─── Theme ───────────────────────────────────────────────────
-  function applyTheme(t) {
-    if (t === 'dark') document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-    localStorage.setItem('theme', t);
-  }
-
-  const toggleTheme = useCallback(() => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    applyTheme(next);
-    updateAppConfig({ theme: next }).catch(console.error);
-  }, [theme]);
+  // Theme is now managed by ThemeContext, no need to apply here
+  // The ThemeContext already handles applying the theme class
 
   // ─── Auto-lock timer ─────────────────────────────────────────
   useEffect(() => {
