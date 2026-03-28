@@ -32,7 +32,12 @@ export default function SplashScreen() {
     <div className="min-h-screen flex flex-col items-center justify-center safe-top"
          style={{ background: 'linear-gradient(160deg, #1e40af 0%, #4f46e5 50%, #7c3aed 100%)' }}>
 
-      {/* Logo */}
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-white/5 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-purple-400/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '0.5s' }} />
+        <div className="absolute top-1/2 right-1/3 w-32 h-32 bg-blue-400/10 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '1s' }} />
+      </div>
       <div className="animate-scale-in"
            style={{ animationDelay: '0s' }}>
         <div style={{
@@ -43,6 +48,7 @@ export default function SplashScreen() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           marginBottom: 20,
           backdropFilter: 'blur(10px)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
         }}>
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
             <path d="M20 4C15.5 4 12 7.5 12 12v3H9v21h22V15h-3v-3c0-4.5-3.5-8-8-8zm0 4c2.8 0 4 2.2 4 4v3H16v-3c0-1.8 1.2-4 4-4zm0 13a3 3 0 110 6 3 3 0 010-6z"
@@ -60,10 +66,11 @@ export default function SplashScreen() {
           letterSpacing: -1,
           fontFamily: "'Plus Jakarta Sans', sans-serif",
           lineHeight: 1.1,
+          textShadow: '0 2px 10px rgba(0,0,0,0.2)',
         }}>
           DigiLocker
         </h1>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', marginTop: 6, fontWeight: 600 }}>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)', marginTop: 6, fontWeight: 600 }}>
           by OM
         </p>
         <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>

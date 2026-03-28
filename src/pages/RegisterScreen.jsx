@@ -51,11 +51,9 @@ export default function RegisterScreen() {
     setLoading(false);
 
     if (result.success) {
-      // Success screen pe jao — wahan se login redirect hoga
-      navigate('/register-success', {
-        replace: true,
-        state: { userName: result.userName || form.name.trim() },
-      });
+      // Auto-login after registration - go directly to login
+      toast.success('Account created! Please login to continue.');
+      navigate('/login', { replace: true });
       return;
     }
 

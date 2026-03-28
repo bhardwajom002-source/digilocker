@@ -7,7 +7,7 @@ export default function AppShell() {
   return (
     <div className="h-screen w-screen overflow-hidden bg-slate-50 flex">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:block w-64 flex-shrink-0">
+      <div className="hidden lg:block w-64 flex-shrink-0 bg-white border-r border-slate-200/60 shadow-xl">
         <Sidebar />
       </div>
       
@@ -19,14 +19,15 @@ export default function AppShell() {
         </div>
         
         {/* Mobile Header */}
-        <div className="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+        <div className="lg:hidden bg-white/95 backdrop-blur-sm border-b border-slate-200/60 px-4 py-3 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-accent rounded-lg flex items-center justify-center shadow-md">
               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
             <span className="font-bold text-slate-900">DigiLocker</span>
+            <span className="text-xs text-primary font-semibold">by OM</span>
           </div>
           <div className="text-sm text-slate-600">Welcome</div>
         </div>

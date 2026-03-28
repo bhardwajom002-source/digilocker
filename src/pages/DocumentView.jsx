@@ -97,6 +97,17 @@ export default function DocumentView() {
     link.href = decryptedUrls[currentFileIndex];
     link.download = files[currentFileIndex]?.originalName || 'document';
     link.click();
+    
+    // Log download activity
+    await addActivityLog('document_download', { 
+      documentId: document.id, 
+      documentTitle: document.title 
+    });
+  };
+
+  const handlePreview = () => {
+    if (!decryptedUrls[currentFileIndex]) return;
+    window.open(decryptedUrls[currentFileIndex], '_blank');
   };
 
   if (isLoading) {
@@ -256,13 +267,16 @@ export default function DocumentView() {
 
       {/* Actions */}
       <div className="flex gap-2">
-        <button onClick={handleDownload} className="btn btn-secondary flex-1 flex items-center justify-center gap-2">
+        <button onClick={handlePreview} className="btn btn-secondary flex items-center justify-center gap-2">
+          <Eye className="w-4 h-4" />
+          Preview
+        </button>
+        <button onClick={handleDownload} className="btn btn-primary flex-1 flex items-center justify-center gap-2">
           <Download className="w-4 h-4" />
           Download
         </button>
-        <button className="btn btn-secondary flex-1 flex items-center justify-center gap-2">
+        <button className="btn btn-secondary flex items-center justify-center gap-2">
           <Share2 className="w-4 h-4" />
-          Share
         </button>
         <button onClick={handleDelete} className="btn btn-danger flex items-center justify-center gap-2">
           <Trash2 className="w-4 h-4" />

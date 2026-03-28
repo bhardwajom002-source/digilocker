@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const features = [
@@ -8,12 +9,19 @@ const features = [
 
 export default function AuthScreen() {
   const navigate = useNavigate();
+  const [isHovering, setIsHovering] = useState(null);
 
   return (
-    <div className="page-enter min-h-screen bg-white dark:bg-slate-900 flex flex-col safe-top safe-bottom">
+    <div className="min-h-screen bg-white dark:bg-slate-900 flex flex-col safe-top safe-bottom overflow-hidden">
+
+      {/* Animated Background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+      </div>
 
       {/* Top section */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-10">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-10 relative z-10">
 
         {/* Logo */}
         <div className="stagger-1" style={{
@@ -76,40 +84,71 @@ export default function AuthScreen() {
       </div>
 
       {/* Buttons */}
-      <div className="px-6 pb-8 flex flex-col gap-3 stagger-6">
+      <div className="px-6 pb-8 flex flex-col gap-3 stagger-6 relative z-10">
         <button
           onClick={() => navigate('/register')}
-          className="btn-press w-full"
+          className="group relative w-full"
           style={{
-            background: '#2563EB',
+            background: 'linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)',
             color: '#fff',
             border: 'none',
+            borderRadius: 16,
+            padding: '16px',
+            fontSize: 15,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+            boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)',
+            transition: 'all 0.3s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 8px 25px rgba(37, 99, 235, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 15px rgba(37, 99, 235, 0.3)';
+          }}
+        >
+          <span className="flex items-center justify-center gap-2">
+            Create Account
+            <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </span>
+        </button>
+        <button
+          onClick={() => navigate('/login')}
+          className="group relative w-full"
+          style={{
+            background: '#fff',
+            color: '#2563EB',
+            border: '2px solid #BFDBFE',
             borderRadius: 16,
             padding: '15px',
             fontSize: 15,
             fontWeight: 700,
             cursor: 'pointer',
             fontFamily: "'Plus Jakarta Sans', sans-serif",
-          }}>
-          Create Account
+            transition: 'all 0.3s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#2563EB';
+            e.currentTarget.style.background = '#EFF6FF';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#BFDBFE';
+            e.currentTarget.style.background = '#fff';
+          }}
+        >
+          <span className="flex items-center justify-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            </svg>
+            I have an account
+          </span>
         </button>
-        <button
-          onClick={() => navigate('/login')}
-          className="btn-press w-full"
-          style={{
-            background: '#fff',
-            color: '#2563EB',
-            border: '2px solid #BFDBFE',
-            borderRadius: 16,
-            padding: '14px',
-            fontSize: 15,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: "'Plus Jakarta Sans', sans-serif",
-          }}>
-          I have an account
-        </button>
-        <p style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 4 }}>
+        <p style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 8 }}>
           🔒 Your data never leaves your device
         </p>
       </div>

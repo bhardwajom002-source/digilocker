@@ -89,8 +89,8 @@ export default function Dashboard() {
             {format(new Date(), 'EEEE, MMMM d, yyyy')}
           </p>
         </div>
-        <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-          <Shield className="w-5 h-5 text-primary" />
+        <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
+          <Shield className="w-6 h-6 text-white" />
         </div>
       </div>
 
@@ -141,28 +141,28 @@ export default function Dashboard() {
       <div className="flex gap-3 overflow-x-auto pb-2">
         <button
           onClick={() => navigate('/upload')}
-          className="btn btn-primary flex items-center gap-2 whitespace-nowrap"
+          className="btn btn-primary flex items-center gap-2 whitespace-nowrap shadow-md hover:shadow-lg transition-shadow"
         >
           <Plus className="w-4 h-4" />
           Add Document
         </button>
         <button
           onClick={() => navigate('/family')}
-          className="btn btn-secondary flex items-center gap-2 whitespace-nowrap"
+          className="btn bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-primary dark:hover:border-primary flex items-center gap-2 whitespace-nowrap transition-all"
         >
           <Users className="w-4 h-4" />
           Add Member
         </button>
         <button
           onClick={() => navigate('/search')}
-          className="btn btn-secondary flex items-center gap-2 whitespace-nowrap"
+          className="btn bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-primary dark:hover:border-primary flex items-center gap-2 whitespace-nowrap transition-all"
         >
           <Search className="w-4 h-4" />
           Search
         </button>
         <button
           onClick={() => navigate('/reports')}
-          className="btn btn-secondary flex items-center gap-2 whitespace-nowrap"
+          className="btn bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-primary dark:hover:border-primary flex items-center gap-2 whitespace-nowrap transition-all"
         >
           <BarChart3 className="w-4 h-4" />
           Reports
