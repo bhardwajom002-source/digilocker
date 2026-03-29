@@ -26,21 +26,31 @@ export function AuthProvider({ children }) {
     async function init() {
       try {
         const config = await getAppConfig();
+
         if (!config?.setupComplete) {
+          // No account — go to register
           setIsSetupComplete(false);
           setIsLoading(false);
           return;
         }
+
         setIsSetupComplete(true);
         setUserName(config.userName || '');
         setUserEmail(config.email || '');
         setAutoLockMinutes(config.autoLockMinutes || 0);
+
         const savedTheme = config.theme || localStorage.getItem('theme') || 'light';
         setTheme(savedTheme);
-        applyTheme(savedTheme);
-        if (config.isLoggedIn === true) {
-          setIsUnlocked(true);
+
+        // ✅ FIX: ALWAYS start LOCKED — force login every session
+        // Never auto-unlock from stored isLoggedIn flag
+        setIsUnlocked(false);
+        try {
+          await updateAppConfig({ isLoggedIn: false });
+        } catch (e) {
+          // ignore if db not ready yet
         }
+
       } catch (err) {
         console.error('Auth init error:', err);
       } finally {
@@ -49,10 +59,6 @@ export function AuthProvider({ children }) {
     }
     init();
   }, []);
-
-  // ─── Theme ───────────────────────────────────────────────────
-  // Theme is now managed by ThemeContext, no need to apply here
-  // The ThemeContext already handles applying the theme class
 
   // ─── Auto-lock timer ─────────────────────────────────────────
   useEffect(() => {
@@ -71,18 +77,12 @@ export function AuthProvider({ children }) {
   }, [isUnlocked, autoLockMinutes]);
 
   // ─── REGISTER ────────────────────────────────────────────────
-  // BUG FIX #1:
-  // Pehle: setupComplete hote hi SABKO block karta tha — same email ho ya alag.
-  // Ab: Same email → "already registered, please login" show karo.
-  //     Different email → New account banao (single-user app reset).
-  //     No account yet → Fresh registration.
   const register = useCallback(async (name, email, password, pin) => {
     try {
       const config = await getAppConfig();
       const normalizedEmail = email.toLowerCase().trim();
 
       if (config?.setupComplete) {
-        // ── Same email registered hai ──
         if (config.email === normalizedEmail) {
           return {
             success: false,
@@ -91,12 +91,8 @@ export function AuthProvider({ children }) {
             error: 'This email is already registered. Please login instead.',
           };
         }
-        // ── Alag email — single-user app mein reset karke naya account banao ──
-        // (Agar multi-user chahiye toh yahan different logic lagega)
-        // Abhi: allow karo, purana account overwrite ho jayega
       }
 
-      // ── Fresh registration (ya different-email reset) ──
       const salt    = generateSalt();
       const pwdHash = await hashPassword(password, salt);
       const pinHash = await hashPin(pin, salt);
@@ -110,45 +106,37 @@ export function AuthProvider({ children }) {
         salt,
         passwordHash:    pwdHash,
         pinHash,
-        isLoggedIn:      false,   // ← register ke baad login nahi — user ko login karna hoga
+        isLoggedIn:      false,
         autoLockMinutes: 0,
         theme:           'light',
         createdAt:       new Date(),
         lastLogin:       null,
       });
 
-      // ── Save user to Supabase ──
+      // Supabase sync
       if (isSupabaseConfigured) {
         try {
           const { error: supabaseError } = await supabase
             .from('users')
-            .upsert([
-              {
-                id: normalizedEmail,
-                email: normalizedEmail,
-                name: name.trim(),
-                password_hash: pwdHash,
-                salt: salt,
-                created_at: new Date().toISOString(),
-              }
-            ], { onConflict: 'id' });
-          
-          if (supabaseError) {
-            console.error('Supabase sync error:', supabaseError);
-          } else {
-            console.log('✅ User synced to Supabase');
-          }
+            .upsert([{
+              id:            normalizedEmail,
+              email:         normalizedEmail,
+              name:          name.trim(),
+              password_hash: pwdHash,
+              salt:          salt,
+              created_at:    new Date().toISOString(),
+            }], { onConflict: 'id' });
+          if (supabaseError) console.error('Supabase sync error:', supabaseError);
         } catch (supabaseErr) {
           console.error('Supabase sync error:', supabaseErr);
         }
       }
 
-      // State: setup complete hai but UNLOCKED nahi — login screen dekhega
       setUserName(name.trim());
       setUserEmail(normalizedEmail);
       setIsSetupComplete(true);
-      setIsUnlocked(false);       // ← unlocked mat karo
-      keyStore.current = null;    // ← key bhi clear karo
+      setIsUnlocked(false);
+      keyStore.current = null;
 
       await addActivityLog('REGISTER', { userName: name, email: normalizedEmail });
       return { success: true, userName: name.trim() };
@@ -172,13 +160,11 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'No account found. Please register first.' };
       }
 
-      // Verify email
       const normalizedEmail = email.toLowerCase().trim();
       if (config.email.toLowerCase() !== normalizedEmail) {
         return { success: false, error: 'Email not found.' };
       }
 
-      // Password check - uses SAME hash function as register
       const pwdHash = await hashPassword(password, config.salt);
       if (pwdHash !== config.passwordHash) {
         const attempts = failedAttempts + 1;
@@ -355,19 +341,17 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // ─── CHANGE PIN ────────────────────────────────────────────
+  // ─── CHANGE PIN ───────────────────────────────────────────────
   const changePin = useCallback(async (currentPin, newPin) => {
     try {
       const config = await getAppConfig();
       if (!config?.setupComplete) {
         return { success: false, error: 'No account found.' };
       }
-      // Verify current PIN
       const currentPinHash = await hashPin(currentPin, config.salt);
       if (currentPinHash !== config.pinHash) {
         return { success: false, error: 'Current PIN is incorrect.' };
       }
-      // Hash new PIN with current salt
       const newPinHash = await hashPin(newPin, config.salt);
       await updateAppConfig({ pinHash: newPinHash });
       await addActivityLog('PIN_CHANGE', {});
@@ -377,7 +361,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // ─── CHANGE PASSWORD ─────────────────────────────────────────
+  // ─── CHANGE PASSWORD ──────────────────────────────────────────
   const changePassword = useCallback(async (currentPwd, newPwd) => {
     try {
       const config = await getAppConfig();
@@ -387,8 +371,7 @@ export function AuthProvider({ children }) {
       }
       const newSalt = generateSalt();
       const newHash = await hashPassword(newPwd, newSalt);
-      const newKey = await deriveKey(newPwd, newSalt);
-
+      const newKey  = await deriveKey(newPwd, newSalt);
       await updateAppConfig({ salt: newSalt, passwordHash: newHash });
       keyStore.current = newKey;
       return { success: true };
@@ -397,7 +380,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // ─── RESET ACCOUNT ───────────────────────────────────────────
+  // ─── RESET ACCOUNT ────────────────────────────────────────────
   const resetAccount = useCallback(async () => {
     try {
       await updateAppConfig({
@@ -420,6 +403,15 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // ─── TOGGLE THEME ─────────────────────────────────────────────
+  const toggleTheme = useCallback(() => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+  }, [theme]);
+
+  // ─── Context Value ────────────────────────────────────────────
   const value = {
     isLoading,
     isSetupComplete,
